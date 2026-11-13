@@ -1,0 +1,16 @@
+# Dados pessoais e documentos assinados (nunca versionar)
+dados-pessoais.local.md
+*.local.md
+
+# Material das disciplinas (PDFs com direitos autorais) e modelos/documentos preenchidos
+*.pdf
+*.docx
+
+# Ambiente
+.venv/
+__pycache__/
+*.pyc
+
+# Chaves privadas da CA e do servidor (geradas localmente)
+*.key
+*.pem
