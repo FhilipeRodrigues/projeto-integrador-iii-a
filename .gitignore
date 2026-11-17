@@ -14,3 +14,6 @@ __pycache__/
 # Chaves privadas da CA e do servidor (geradas localmente)
 *.key
 *.pem
+
+# Pasta de certificados gerados localmente (chaves privadas)
+certs/

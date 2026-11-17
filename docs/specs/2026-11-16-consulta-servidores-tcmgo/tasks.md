@@ -4,18 +4,18 @@ PRD: [prd.md](prd.md) · TechSpec: [techspec.md](techspec.md)
 
 | # | Task | RF / RNF | Depende | Status |
 |---|---|---|---|---|
-| 01 | [Base fictícia reproduzível](tasks/01-base-ficticia.md) | RF-01, RNF-01 | — | pendente |
-| 02 | [Cálculos da ficha](tasks/02-calculos-ficha.md) | RF-02, RF-07, RF-08, RF-09 | 01 | pendente |
-| 03 | [Busca de servidores](tasks/03-busca-servidores.md) | RF-03, RF-04 | 01 | pendente |
-| 04 | [Certificados da CA local](tasks/04-certificados-ca-local.md) | RF-14, RNF-02, RNF-06 | — | pendente |
-| 05 | [Canal seguro e lista de municípios](tasks/05-canal-seguro-municipios.md) | RF-10, RF-12, RF-14 | 01, 04 | pendente |
-| 06 | [Consultas de busca e ficha pelo canal](tasks/06-consultas-busca-ficha.md) | RF-02, RF-03, RF-04, RF-09, RF-10 | 02, 03, 05 | pendente |
-| 07 | [Erros do protocolo](tasks/07-erros-do-protocolo.md) | RF-13 | 06 | pendente |
-| 08 | [Atendimento simultâneo](tasks/08-atendimento-simultaneo.md) | RF-11, RNF-03 | 06 | pendente |
-| 09 | [Interface: busca e lista](tasks/09-interface-busca.md) | RF-04, RF-05, RF-06, RNF-01, RNF-05 | 06 | pendente |
-| 10 | [Interface: ficha do servidor](tasks/10-interface-ficha.md) | RF-02, RF-05, RF-09 | 09 | pendente |
-| 11 | [Interface: erros de rede e de certificado](tasks/11-interface-erros-de-rede.md) | RF-12, RF-14 | 09 | pendente |
-| 12 | [README e execução em pasta limpa](tasks/12-readme-execucao.md) | RNF-04 | 10, 11 | pendente |
+| 01 | [Base fictícia reproduzível](tasks/01-base-ficticia.md) | RF-01, RNF-01 | — | feita |
+| 02 | [Cálculos da ficha](tasks/02-calculos-ficha.md) | RF-02, RF-07, RF-08, RF-09 | 01 | feita |
+| 03 | [Busca de servidores](tasks/03-busca-servidores.md) | RF-03, RF-04 | 01 | feita |
+| 04 | [Certificados da CA local](tasks/04-certificados-ca-local.md) | RF-14, RNF-02, RNF-06 | — | feita |
+| 05 | [Canal seguro e lista de municípios](tasks/05-canal-seguro-municipios.md) | RF-10, RF-12, RF-14 | 01, 04 | feita |
+| 06 | [Consultas de busca e ficha pelo canal](tasks/06-consultas-busca-ficha.md) | RF-02, RF-03, RF-04, RF-09, RF-10 | 02, 03, 05 | feita |
+| 07 | [Erros do protocolo](tasks/07-erros-do-protocolo.md) | RF-13 | 06 | feita |
+| 08 | [Atendimento simultâneo](tasks/08-atendimento-simultaneo.md) | RF-11, RNF-03 | 06 | feita |
+| 09 | [Interface: busca e lista](tasks/09-interface-busca.md) | RF-04, RF-05, RF-06, RNF-01, RNF-05 | 06 | feita |
+| 10 | [Interface: ficha do servidor](tasks/10-interface-ficha.md) | RF-02, RF-05, RF-09 | 09 | feita |
+| 11 | [Interface: erros de rede e de certificado](tasks/11-interface-erros-de-rede.md) | RF-12, RF-14 | 09 | feita |
+| 12 | [README e execução em pasta limpa](tasks/12-readme-execucao.md) | RNF-04 | 10, 11 | feita |
 
 **Ordem sugerida de execução:** 01, 02, 03, 04, 05, 06, 07, 08, 09, 10, 11, 12. As tasks 02, 03 e 04 não dependem entre si.
 
