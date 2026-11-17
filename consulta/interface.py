@@ -23,6 +23,51 @@ SEM_RESULTADO = "Nenhum servidor encontrado"
 TAMANHO_FONTE_PT = 12
 INTERVALO_FILA_MS = 50
 _FONTES_PADRAO = ("TkDefaultFont", "TkTextFont", "TkHeadingFont", "TkMenuFont", "TkFixedFont")
+SELECIONE_SERVIDOR = "Selecione um servidor da lista para ver a ficha."
+# (chave da ficha, rótulo), na ordem de exibição, duas por linha.
+CAMPOS_DA_FICHA = (
+    ("nome", "Nome completo"), ("municipio", "Município"),
+    ("sexo", "Sexo"), ("idade", "Idade"),
+    ("orgao", "Órgão de atuação"), ("pcd", "PCD"),
+    ("doenca_profissional", "Doença profissional ou acidente de trabalho"),
+    ("data_ingresso", "Data de ingresso"),
+    ("data_solicitacao", "Data da solicitação"),
+    ("ultima_remuneracao_centavos", "Última remuneração"),
+    ("tempo_contribuicao_anos", "Tempo de contribuição"),
+)
+_SEXOS = {"F": "Feminino", "M": "Masculino"}
+
+
+def _data_br(iso: str) -> str:
+    ano, mes, dia = iso.split("-")
+    return f"{dia}/{mes}/{ano}"
+
+
+def _dinheiro_br(centavos: int) -> str:
+    reais, resto = divmod(centavos, 100)
+    return f"R$ {reais:,}".replace(",", ".") + f",{resto:02d}"
+
+
+def _anos(quantidade: int) -> str:
+    return f"{quantidade} ano" if quantidade == 1 else f"{quantidade} anos"
+
+
+def formatar_ficha(ficha: dict) -> dict:
+    """Valores da ficha como aparecem na janela (formato brasileiro, Sim/Não)."""
+    doenca = ficha["doenca_profissional"]
+    return {
+        "nome": ficha["nome"],
+        "municipio": ficha["municipio"],
+        "sexo": _SEXOS.get(ficha["sexo"], ficha["sexo"]),
+        "idade": _anos(ficha["idade"]),
+        "orgao": ficha["orgao"],
+        "pcd": "Sim" if ficha["pcd"] else "Não",
+        "doenca_profissional": f"Sim: {doenca}" if doenca else "Não",
+        "data_ingresso": _data_br(ficha["data_ingresso"]),
+        "data_solicitacao": _data_br(ficha["data_solicitacao"]),
+        "ultima_remuneracao_centavos": _dinheiro_br(ficha["ultima_remuneracao_centavos"]),
+        "tempo_contribuicao_anos": _anos(ficha["tempo_contribuicao_anos"]),
+    }
 
 
 class JanelaConsulta:
@@ -32,9 +77,10 @@ class JanelaConsulta:
         self._fila = queue.Queue()
         self._em_andamento = 0
         self._busca_atual = 0
+        self._ficha_atual = 0
 
         raiz.title(TITULO)
-        raiz.minsize(640, 420)
+        raiz.minsize(760, 640)
         self._configurar_fontes()
         self._montar()
         self._agendamento = raiz.after(INTERVALO_FILA_MS, self._drenar_fila)
@@ -51,6 +97,7 @@ class JanelaConsulta:
         municipio = None if escolhido == TODOS_OS_MUNICIPIOS else escolhido
         self._busca_atual += 1
         numero = self._busca_atual
+        self._limpar_ficha()
         self._executar(
             lambda: self._cliente.buscar(nome, municipio),
             lambda resultado, erro: self._mostrar_resultados(numero, resultado, erro),
@@ -98,7 +145,7 @@ class JanelaConsulta:
         corpo.columnconfigure(0, weight=1)
         corpo.rowconfigure(0, weight=1)
         self._lista = ttk.Treeview(
-            corpo, columns=("nome", "municipio"), show="headings", selectmode="browse"
+            corpo, columns=("nome", "municipio"), show="headings", selectmode="browse", height=6
         )
         self._lista.heading("nome", text="Nome")
         self._lista.heading("municipio", text="Município")
@@ -108,10 +155,32 @@ class JanelaConsulta:
         barra = ttk.Scrollbar(corpo, orient="vertical", command=self._lista.yview)
         barra.grid(row=0, column=1, sticky="ns")
         self._lista.configure(yscrollcommand=barra.set)
+        self._lista.bind("<<TreeviewSelect>>", self._ao_selecionar)
+
+        moldura = ttk.LabelFrame(raiz, text="Ficha do servidor", padding=12)
+        moldura.grid(row=3, column=0, sticky="ew", padx=12, pady=(8, 0))
+        moldura.columnconfigure((1, 3), weight=1, uniform="valor")
+        self._dica_ficha = ttk.Label(moldura, text=SELECIONE_SERVIDOR)
+        self._dica_ficha.grid(row=0, column=0, columnspan=4, sticky="w")
+        self._campos_ficha = ttk.Frame(moldura)
+        self._campos_ficha.grid(row=0, column=0, columnspan=4, sticky="ew")
+        self._campos_ficha.columnconfigure((1, 3), weight=1, uniform="valor")
+        self._valores_ficha = {}
+        for posicao, (chave, rotulo) in enumerate(CAMPOS_DA_FICHA):
+            linha, lado = divmod(posicao, 2)
+            ttk.Label(self._campos_ficha, text=rotulo, wraplength=160, foreground="#555555").grid(
+                row=linha, column=lado * 2, sticky="nw", padx=(0 if lado == 0 else 16, 8), pady=2
+            )
+            variavel = tk.StringVar()
+            self._valores_ficha[chave] = variavel
+            ttk.Label(self._campos_ficha, textvariable=variavel, wraplength=190).grid(
+                row=linha, column=lado * 2 + 1, sticky="nw", pady=2
+            )
+        self._campos_ficha.grid_remove()
 
         self._situacao = tk.StringVar()
         ttk.Label(raiz, textvariable=self._situacao, padding=(12, 8)).grid(
-            row=3, column=0, sticky="ew"
+            row=4, column=0, sticky="ew"
         )
 
     def _executar(self, trabalho, ao_concluir) -> None:
@@ -159,6 +228,36 @@ class JanelaConsulta:
                 "", "end", iid=str(servidor["id"]), values=(servidor["nome"], servidor["municipio"])
             )
         self._situacao.set(SEM_RESULTADO if not servidores else f"{len(servidores)} servidor(es) encontrado(s)")
+
+    def _ao_selecionar(self, _evento) -> None:
+        selecionados = self._lista.selection()
+        if not selecionados:
+            return
+        identificacao = int(selecionados[0])
+        self._ficha_atual += 1
+        numero = self._ficha_atual
+        self._executar(
+            lambda: self._cliente.ficha(identificacao),
+            lambda ficha, erro: self._mostrar_ficha(numero, ficha, erro),
+        )
+
+    def _mostrar_ficha(self, numero, ficha, erro) -> None:
+        if numero != self._ficha_atual:
+            return  # outra seleção ou uma nova busca já aconteceu
+        if erro is not None:
+            self._mostrar_erro(erro)
+            return
+        for chave, valor in formatar_ficha(ficha).items():
+            self._valores_ficha[chave].set(valor)
+        self._dica_ficha.grid_remove()
+        self._campos_ficha.grid()
+
+    def _limpar_ficha(self) -> None:
+        self._ficha_atual += 1  # descarta a ficha que ainda esteja a caminho
+        for variavel in self._valores_ficha.values():
+            variavel.set("")
+        self._campos_ficha.grid_remove()
+        self._dica_ficha.grid()
 
     def _mostrar_erro(self, erro) -> None:
         # O tratamento detalhado de falhas de rede e de certificado é da task 11.

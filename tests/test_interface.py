@@ -1,3 +1,4 @@
+import contextlib
 import tempfile
 import time
 import tkinter as tk
@@ -22,6 +23,10 @@ class ClienteFalso:
 
     def buscar(self, nome, municipio=None):
         return dominio.buscar(SERVIDORES, nome, municipio)
+
+    def ficha(self, identificacao):
+        servidor = next(s for s in SERVIDORES if s["id"] == identificacao)
+        return dominio.montar_ficha(servidor)
 
 
 def _percorrer(widget):
@@ -136,9 +141,112 @@ class InterfaceBuscaTest(JanelaBase):
         self.assertEqual(self.janela._situacao.get(), "sem rede")
 
 
+class InterfaceFichaTest(JanelaBase):
+    def selecionar(self, identificacao):
+        self.janela._lista.selection_set(str(identificacao))
+        self.raiz.update()  # entrega o evento de seleção, que pede a ficha
+        self.esperar()
+
+    def ficha(self):
+        return {c: v.get() for c, v in self.janela._valores_ficha.items()}
+
+    def ficha_visivel(self):
+        return self.janela._campos_ficha.winfo_manager() == "grid"
+
+    def com_servidor(self, **campos):
+        servidor = dict(SERVIDORES[0], id=9001, nome="Fulano de Teste", **campos)
+
+        class Isolado(ClienteFalso):
+            def buscar(self, nome, municipio=None):
+                return dominio.buscar([servidor], nome, municipio)
+
+            def ficha(self, identificacao):
+                return dominio.montar_ficha(servidor)
+
+        self.janela._cliente = Isolado()
+        self.buscar("fulano")
+        self.selecionar(9001)
+        return self.ficha()
+
+    def test_Selecionar_um_servidor_mostra_a_ficha(self):
+        self.buscar("joao")
+        self.selecionar(6)
+        servidor = next(s for s in SERVIDORES if s["id"] == 6)
+        rotulos = [str(w.cget("text")) for w in _percorrer(self.janela._campos_ficha)
+                   if isinstance(w, ttk.Label)]
+        for _, rotulo in interface.CAMPOS_DA_FICHA:
+            self.assertIn(rotulo, rotulos)
+        self.assertEqual(len(self.ficha()), 11)
+        self.assertTrue(all(self.ficha().values()))
+        self.assertEqual(self.ficha()["nome"], servidor["nome"])
+        self.assertEqual(self.ficha()["municipio"], servidor["municipio"])
+        self.assertTrue(self.ficha_visivel())
+
+    def test_Os_valores_aparecem_em_formato_brasileiro(self):
+        ficha = self.com_servidor(
+            data_ingresso="1994-03-01", data_solicitacao="2026-09-15",
+            ultima_remuneracao_centavos=485000,
+        )
+        self.assertEqual(ficha["data_ingresso"], "01/03/1994")
+        self.assertEqual(ficha["data_solicitacao"], "15/09/2026")
+        self.assertEqual(ficha["ultima_remuneracao_centavos"], "R$ 4.850,00")
+        self.assertEqual(ficha["tempo_contribuicao_anos"], "32 anos")
+
+    def test_Remuneracao_com_milhar_e_centavos(self):
+        self.assertEqual(interface._dinheiro_br(123456789), "R$ 1.234.567,89")
+        self.assertEqual(interface._dinheiro_br(5), "R$ 0,05")
+
+    def test_PCD_e_doenca_profissional_ou_acidente_de_trabalho(self):
+        ficha = self.com_servidor(pcd=False, doenca_profissional=None)
+        self.assertEqual((ficha["pcd"], ficha["doenca_profissional"]), ("Não", "Não"))
+        ficha = self.com_servidor(pcd=True, doenca_profissional="Tendinite ocupacional")
+        self.assertEqual(
+            (ficha["pcd"], ficha["doenca_profissional"]), ("Sim", "Sim: Tendinite ocupacional")
+        )
+
+    def test_Selecionar_outro_servidor_atualiza_a_ficha(self):
+        self.buscar("joao")
+        self.selecionar(6)
+        primeira = self.ficha()
+        self.selecionar(19)
+        self.assertNotEqual(self.ficha()["nome"], primeira["nome"])
+        self.assertEqual(self.ficha()["nome"], next(s["nome"] for s in SERVIDORES if s["id"] == 19))
+
+    def test_Uma_nova_busca_limpa_a_ficha(self):
+        self.buscar("joao")
+        self.selecionar(6)
+        self.assertTrue(self.ficha_visivel())
+        self.buscar("joana")
+        self.assertFalse(self.ficha_visivel())
+        self.assertFalse(any(self.ficha().values()))
+        self.selecionar(self.janela._lista.get_children()[0])
+        self.assertTrue(self.ficha_visivel())
+
+    def test_Ficha_que_chega_depois_de_nova_busca_e_descartada(self):
+        self.buscar("joao")
+        self.janela._lista.selection_set("6")
+        self.raiz.update()  # dispara o pedido da ficha, sem esperar a resposta
+        self.janela._nome.set("joana")
+        self.janela.buscar()
+        self.esperar()
+        self.assertFalse(self.ficha_visivel())
+
+    def test_A_ficha_nao_indica_elegibilidade_nem_mostra_a_data_de_nascimento(self):
+        self.buscar("joao")
+        self.selecionar(6)
+        servidor = next(s for s in SERVIDORES if s["id"] == 6)
+        textos = [str(w.cget("text")) for w in _percorrer(self.raiz) if "text" in w.keys()]
+        textos += [v for v in self.ficha().values()]
+        junto = " ".join(textos).casefold()
+        for proibido in ("aposent", "elegib", "apto", "nascimento"):
+            self.assertNotIn(proibido, junto)
+        self.assertNotIn(interface._data_br(servidor["data_nascimento"]), junto)
+
+
 class InterfaceIntegracaoTest(unittest.TestCase):
-    @unittest.skipUnless(_openssl(), "openssl não encontrado; veja a mensagem do script")
-    def test_A_lista_corresponde_ao_que_o_servidor_tem(self):
+    @contextlib.contextmanager
+    def janela_no_ar(self):
+        """Janela real ligada ao servidor real (TLS) com a base fictícia."""
         try:
             raiz = tk.Tk()
         except tk.TclError as erro:
@@ -150,19 +258,44 @@ class InterfaceIntegracaoTest(unittest.TestCase):
             with servidor_no_ar(SERVIDORES, certs) as (srv, _):
                 rede = cliente.ClienteRede("127.0.0.1", srv.porta, certs / "ca.crt")
                 janela = interface.JanelaConsulta(raiz, rede)
-                janela._nome.set("joao")
-                janela.buscar()
-                limite = time.monotonic() + 10
-                while janela.aguardando() and time.monotonic() < limite:
+
+                def esperar():
+                    limite = time.monotonic() + 10
+                    while janela.aguardando() and time.monotonic() < limite:
+                        raiz.update()
+                        time.sleep(0.01)
                     raiz.update()
-                    time.sleep(0.01)
-                raiz.update()
-                do_servidor = [(s["nome"], s["municipio"]) for s in rede.buscar("joao")]
-                na_janela = [
-                    tuple(janela._lista.item(i, "values")) for i in janela._lista.get_children()
-                ]
+
+                yield janela, rede, esperar
+
+    @unittest.skipUnless(_openssl(), "openssl não encontrado; veja a mensagem do script")
+    def test_A_lista_corresponde_ao_que_o_servidor_tem(self):
+        with self.janela_no_ar() as (janela, rede, esperar):
+            janela._nome.set("joao")
+            janela.buscar()
+            esperar()
+            do_servidor = [(s["nome"], s["municipio"]) for s in rede.buscar("joao")]
+            na_janela = [
+                tuple(janela._lista.item(i, "values")) for i in janela._lista.get_children()
+            ]
         self.assertTrue(do_servidor)
         self.assertEqual(na_janela, do_servidor)
+
+    @unittest.skipUnless(_openssl(), "openssl não encontrado; veja a mensagem do script")
+    def test_A_ficha_da_janela_corresponde_ao_servidor(self):
+        with self.janela_no_ar() as (janela, rede, esperar):
+            raiz_update = janela._raiz.update
+            janela._nome.set("joao")
+            janela.buscar()
+            esperar()
+            identificacao = janela._lista.get_children()[0]
+            janela._lista.selection_set(identificacao)
+            raiz_update()  # entrega o evento de seleção, que pede a ficha
+            esperar()
+            do_servidor = interface.formatar_ficha(rede.ficha(int(identificacao)))
+            na_janela = {c: v.get() for c, v in janela._valores_ficha.items()}
+        self.assertEqual(na_janela, do_servidor)
+        self.assertTrue(all(na_janela.values()))
 
 
 if __name__ == "__main__":
