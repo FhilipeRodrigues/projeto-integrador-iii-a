@@ -51,6 +51,20 @@ class ClienteRede:
                 f"Não foi possível conectar ao servidor em {self._host}:{self._porta}."
             ) from erro
 
+    def buscar(self, nome: str, municipio: str | None = None) -> list:
+        """Servidores (id, nome, município) cujo nome contém `nome`, opcionalmente num município."""
+        return self._dados({"op": "buscar", "nome": nome, "municipio": municipio})
+
+    def ficha(self, identificacao: int) -> dict:
+        """Ficha do servidor, com idade e tempo de contribuição calculados pelo servidor."""
+        return self._dados({"op": "ficha", "id": identificacao})
+
+    def _dados(self, requisicao: dict):
+        resposta = self.consultar(requisicao)
+        if resposta.get("ok") is not True:
+            raise ErroDeRede("O servidor não atendeu a consulta.")
+        return resposta["dados"]
+
     def _criar_contexto(self) -> ssl.SSLContext:
         try:
             contexto = ssl.create_default_context(cafile=str(self._ca))

@@ -19,7 +19,7 @@ BASE_PADRAO = RAIZ / "data" / "servidores.json"
 HOST_PADRAO = "127.0.0.1"
 PORTA_PADRAO = 8443
 TIMEOUT_S = 5
-OPERACOES = ("municipios",)
+TAMANHO_MAXIMO_NOME = 100
 
 MENSAGEM_SEM_CERTIFICADOS = (
     "Certificados do servidor não encontrados ou inválidos em '{pasta}'. "
@@ -40,6 +40,10 @@ def criar_contexto_tls(pasta_certs) -> ssl.SSLContext:
     except (OSError, ssl.SSLError) as erro:
         raise CertificadosAusentes(MENSAGEM_SEM_CERTIFICADOS.format(pasta=pasta)) from erro
     return contexto
+
+
+def _invalida(motivo: str) -> protocolo.ErroDeAtendimento:
+    return protocolo.ErroDeAtendimento(protocolo.REQUISICAO_INVALIDA, f"Requisição inválida: {motivo}")
 
 
 def _registrar(mensagem: str) -> None:
@@ -90,24 +94,82 @@ class Servidor:
             with self._contexto.wrap_socket(conexao, server_side=True) as seguro:
                 tls = f"{seguro.version()} {seguro.cipher()[0]}"
                 operacao, resposta = self._responder(seguro)
-                if resposta is not None:
-                    protocolo.escrever_mensagem(seguro, resposta)
-                self._log(f"{origem} {tls} op={operacao} resultado={'ok' if resposta else 'erro'}")
+                protocolo.escrever_mensagem(seguro, resposta)
+                resultado = "ok" if resposta["ok"] else f"erro:{resposta['erro']['codigo']}"
+                self._log(f"{origem} {tls} op={operacao} resultado={resultado}")
         except (OSError, ssl.SSLError) as erro:
             self._log(f"{origem} op=? resultado=falha_de_conexao ({type(erro).__name__})")
         finally:
             conexao.close()  # idempotente; cobre o aperto de mão que não chegou a completar
 
     def _responder(self, seguro):
-        """Lê a requisição e devolve (operação para o log, resposta ou None)."""
+        """Lê a requisição e devolve (operação para o log, resposta de sucesso ou de erro).
+
+        Todo erro vira resposta e afeta só esta conexão (RF-13). A operação só vai para o
+        log depois de reconhecida, para que texto do cliente não entre no registro.
+        """
+        operacao = "?"
         try:
-            requisicao = protocolo.ler_mensagem(seguro.makefile("rb"))
-        except protocolo.ProtocoloErro:
-            return "?", None
-        operacao = requisicao.get("op")
-        if operacao not in OPERACOES:
-            return "?", None
-        return operacao, {"ok": True, "dados": dominio.listar_municipios(self._servidores)}
+            with seguro.makefile("rb") as leitor:
+                try:
+                    requisicao = protocolo.ler_mensagem(leitor)
+                except protocolo.ProtocoloErro as erro:
+                    if isinstance(erro, protocolo.LinhaGrandeDemais):
+                        protocolo.descartar_excesso(leitor)
+                    raise protocolo.ErroDeAtendimento(
+                        protocolo.REQUISICAO_INVALIDA, f"Requisição inválida: {erro}."
+                    ) from erro
+            tratar = self._tratar(requisicao.get("op"))
+            operacao = requisicao["op"]
+            return operacao, {"ok": True, "dados": tratar(requisicao)}
+        except protocolo.ErroDeAtendimento as erro:
+            return operacao, protocolo.resposta_erro(erro.codigo, erro.mensagem)
+        except OSError:
+            raise  # timeout ou canal rompido: não há a quem responder; _atender encerra a conexão
+        except Exception as erro:  # a falha vai para o log; o cliente só vê a mensagem genérica
+            self._log(f"op={operacao} falha_inesperada ({type(erro).__name__})")
+            return operacao, protocolo.resposta_erro(
+                protocolo.ERRO_INTERNO, "Erro interno do servidor. Tente novamente."
+            )
+
+    def _tratar(self, operacao):
+        if not isinstance(operacao, str):
+            raise protocolo.ErroDeAtendimento(
+                protocolo.REQUISICAO_INVALIDA, "Requisição inválida: informe a operação em 'op'."
+            )
+        tratar = {
+            "municipios": self._municipios,
+            "buscar": self._buscar,
+            "ficha": self._ficha,
+        }.get(operacao)
+        if tratar is None:
+            raise protocolo.ErroDeAtendimento(protocolo.OPERACAO_DESCONHECIDA, "Operação desconhecida.")
+        return tratar
+
+    def _municipios(self, _requisicao):
+        return dominio.listar_municipios(self._servidores)
+
+    def _buscar(self, requisicao):
+        nome, municipio = requisicao.get("nome"), requisicao.get("municipio")
+        if not isinstance(nome, str):
+            raise _invalida("informe o nome (texto) a buscar.")
+        if len(nome) > TAMANHO_MAXIMO_NOME:
+            raise _invalida(f"o nome deve ter no máximo {TAMANHO_MAXIMO_NOME} caracteres.")
+        if municipio is not None and (
+            not isinstance(municipio, str)
+            or municipio not in dominio.listar_municipios(self._servidores)
+        ):
+            raise _invalida("município desconhecido.")
+        return dominio.buscar(self._servidores, nome, municipio)
+
+    def _ficha(self, requisicao):
+        identificacao = requisicao.get("id")
+        if type(identificacao) is not int:
+            raise _invalida("informe a identificação (número inteiro) do servidor.")
+        for servidor in self._servidores:
+            if servidor["id"] == identificacao:
+                return dominio.montar_ficha(servidor)
+        raise protocolo.ErroDeAtendimento(protocolo.NAO_ENCONTRADO, "Servidor não encontrado.")
 
 
 def main(argumentos=None) -> int:
