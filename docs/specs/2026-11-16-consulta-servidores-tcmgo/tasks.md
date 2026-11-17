@@ -6,7 +6,7 @@ PRD: [prd.md](prd.md) · TechSpec: [techspec.md](techspec.md)
 |---|---|---|---|---|
 | 01 | [Base fictícia reproduzível](tasks/01-base-ficticia.md) | RF-01, RNF-01 | — | feita |
 | 02 | [Cálculos da ficha](tasks/02-calculos-ficha.md) | RF-02, RF-07, RF-08, RF-09 | 01 | feita |
-| 03 | [Busca de servidores](tasks/03-busca-servidores.md) | RF-03, RF-04 | 01 | pendente |
+| 03 | [Busca de servidores](tasks/03-busca-servidores.md) | RF-03, RF-04 | 01 | feita |
 | 04 | [Certificados da CA local](tasks/04-certificados-ca-local.md) | RF-14, RNF-02, RNF-06 | — | pendente |
 | 05 | [Canal seguro e lista de municípios](tasks/05-canal-seguro-municipios.md) | RF-10, RF-12, RF-14 | 01, 04 | pendente |
 | 06 | [Consultas de busca e ficha pelo canal](tasks/06-consultas-busca-ficha.md) | RF-02, RF-03, RF-04, RF-09, RF-10 | 02, 03, 05 | pendente |
