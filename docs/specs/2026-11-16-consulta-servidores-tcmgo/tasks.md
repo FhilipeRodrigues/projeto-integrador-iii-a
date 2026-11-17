@@ -12,7 +12,7 @@ PRD: [prd.md](prd.md) · TechSpec: [techspec.md](techspec.md)
 | 06 | [Consultas de busca e ficha pelo canal](tasks/06-consultas-busca-ficha.md) | RF-02, RF-03, RF-04, RF-09, RF-10 | 02, 03, 05 | feita |
 | 07 | [Erros do protocolo](tasks/07-erros-do-protocolo.md) | RF-13 | 06 | feita |
 | 08 | [Atendimento simultâneo](tasks/08-atendimento-simultaneo.md) | RF-11, RNF-03 | 06 | feita |
-| 09 | [Interface: busca e lista](tasks/09-interface-busca.md) | RF-04, RF-05, RF-06, RNF-01, RNF-05 | 06 | pendente |
+| 09 | [Interface: busca e lista](tasks/09-interface-busca.md) | RF-04, RF-05, RF-06, RNF-01, RNF-05 | 06 | feita |
 | 10 | [Interface: ficha do servidor](tasks/10-interface-ficha.md) | RF-02, RF-05, RF-09 | 09 | pendente |
 | 11 | [Interface: erros de rede e de certificado](tasks/11-interface-erros-de-rede.md) | RF-12, RF-14 | 09 | pendente |
 | 12 | [README e execução em pasta limpa](tasks/12-readme-execucao.md) | RNF-04 | 10, 11 | pendente |

@@ -51,6 +51,10 @@ class ClienteRede:
                 f"Não foi possível conectar ao servidor em {self._host}:{self._porta}."
             ) from erro
 
+    def municipios(self) -> list:
+        """Nomes dos municípios, em ordem alfabética."""
+        return self._dados({"op": "municipios"})
+
     def buscar(self, nome: str, municipio: str | None = None) -> list:
         """Servidores (id, nome, município) cujo nome contém `nome`, opcionalmente num município."""
         return self._dados({"op": "buscar", "nome": nome, "municipio": municipio})
