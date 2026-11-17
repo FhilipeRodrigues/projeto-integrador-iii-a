@@ -1,5 +1,5 @@
 ---
-status: pendente
+status: feita
 requisitos: [RF-12, RF-14]
 depende: ["09"]
 ---

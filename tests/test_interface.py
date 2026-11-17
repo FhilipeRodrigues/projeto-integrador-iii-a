@@ -1,5 +1,8 @@
 import contextlib
+import socket
+import ssl
 import tempfile
+import threading
 import time
 import tkinter as tk
 import unittest
@@ -9,7 +12,7 @@ from tkinter import ttk
 
 from consulta import base, cliente, dominio, interface
 from scripts import gerar_certificados
-from tests.test_integracao_tls import _openssl, servidor_no_ar
+from tests.test_integracao_tls import _openssl, servidor_no_ar, servidor_no_ar_em
 
 RAIZ = Path(__file__).resolve().parent.parent
 SERVIDORES = base.carregar(RAIZ / "data" / "servidores.json")["servidores"]
@@ -241,6 +244,146 @@ class InterfaceFichaTest(JanelaBase):
         for proibido in ("aposent", "elegib", "apto", "nascimento"):
             self.assertNotIn(proibido, junto)
         self.assertNotIn(interface._data_br(servidor["data_nascimento"]), junto)
+
+
+MSG_PARADO = "Não foi possível conectar ao servidor. Verifique se ele está em execução."
+MSG_NAO_CONFIAVEL = "Servidor não confiável: o certificado não foi emitido pela CA do projeto."
+
+
+class ClienteParado(ClienteFalso):
+    def municipios(self):
+        raise cliente.ErroDeRede(MSG_PARADO)
+
+    def buscar(self, nome, municipio=None):
+        raise cliente.ErroDeRede(MSG_PARADO)
+
+
+class InterfaceServidorParadoTest(JanelaBase):
+    cliente_de_rede = ClienteParado
+
+    def test_O_servidor_esta_parado_ao_abrir_a_janela(self):
+        self.assertEqual(self.janela._situacao.get(), MSG_PARADO)
+        self.assertEqual(tuple(self.janela._seletor.cget("values")), (interface.TODOS_OS_MUNICIPIOS,))
+
+    def test_O_servidor_esta_parado_ao_buscar(self):
+        self.buscar("maria")
+        self.assertEqual(self.janela._situacao.get(), MSG_PARADO)
+        self.assertEqual(self.linhas(), [])
+        self.assertTrue(self.janela._botao_buscar.instate(["!disabled"]))  # janela utilizável
+
+    def test_O_servidor_volta_a_funcionar_sem_reiniciar_a_janela(self):
+        self.janela._cliente = ClienteFalso()
+        self.buscar("joao")
+        self.assertTrue(self.linhas())
+        self.assertGreater(len(self.janela._seletor.cget("values")), 1)
+
+
+class InterfaceConsultaLentaTest(JanelaBase):
+    def test_A_janela_continua_responsiva_durante_uma_consulta_lenta(self):
+        liberar = threading.Event()
+
+        class Lento(ClienteFalso):
+            def buscar(self, nome, municipio=None):
+                liberar.wait(5)
+                return super().buscar(nome, municipio)
+
+        self.janela._cliente = Lento()
+        self.janela._nome.set("joao")
+        self.janela.buscar()
+        self.assertTrue(self.janela._botao_buscar.instate(["disabled"]))
+        self.janela.buscar()  # Enter no campo durante a consulta é ignorado
+        for _ in range(5):
+            self.raiz.update()  # a janela atende eventos enquanto espera
+        self.assertTrue(self.janela._botao_buscar.instate(["disabled"]))
+        liberar.set()
+        self.esperar()
+        self.assertTrue(self.janela._botao_buscar.instate(["!disabled"]))
+        self.assertTrue(self.linhas())
+
+
+@unittest.skipUnless(_openssl(), "openssl não encontrado; veja a mensagem do script")
+class InterfaceErrosDeRedeTest(unittest.TestCase):
+    @classmethod
+    def setUpClass(cls):
+        cls._tmp = tempfile.TemporaryDirectory()
+        raiz = Path(cls._tmp.name)
+        cls.certs = gerar_certificados.gerar_certificados(raiz / "certs")
+        cls.certs_de_outra_ca = gerar_certificados.gerar_certificados(raiz / "outra")
+
+    @classmethod
+    def tearDownClass(cls):
+        cls._tmp.cleanup()
+
+    def abrir(self, porta):
+        try:
+            raiz = tk.Tk()
+        except tk.TclError as erro:
+            self.skipTest(f"sem ambiente gráfico: {erro}")
+        raiz.withdraw()
+        self.addCleanup(raiz.destroy)
+        rede = cliente.ClienteRede("127.0.0.1", porta, self.certs / "ca.crt")
+        janela = interface.JanelaConsulta(raiz, rede)
+        self.esperar(janela)
+        return janela
+
+    def esperar(self, janela):
+        limite = time.monotonic() + 10
+        while janela.aguardando() and time.monotonic() < limite:
+            janela._raiz.update()
+            time.sleep(0.01)
+        janela._raiz.update()
+
+    def buscar(self, janela, nome):
+        janela._nome.set(nome)
+        janela.buscar()
+        self.esperar(janela)
+
+    def test_A_conexao_cai_no_meio_da_consulta(self):
+        contexto = ssl.SSLContext(ssl.PROTOCOL_TLS_SERVER)
+        contexto.load_cert_chain(self.certs / "servidor.crt", self.certs / "servidor.key")
+        escuta = socket.create_server(("127.0.0.1", 0))
+        self.addCleanup(escuta.close)
+
+        def fechar_sem_responder():
+            while True:
+                try:
+                    bruto, _ = escuta.accept()
+                except OSError:
+                    return  # a escuta foi fechada
+                try:
+                    with contexto.wrap_socket(bruto, server_side=True) as seguro:
+                        with seguro.makefile("rb") as arquivo:
+                            arquivo.readline()
+                except OSError:
+                    pass
+
+        threading.Thread(target=fechar_sem_responder, daemon=True).start()
+        janela = self.abrir(escuta.getsockname()[1])
+        self.buscar(janela, "maria")
+        self.assertEqual(janela._situacao.get(), cliente.CONEXAO_INTERROMPIDA)
+        self.assertEqual(janela._lista.get_children(), ())
+        self.assertTrue(janela._botao_buscar.instate(["!disabled"]))  # pode buscar de novo
+
+    def test_O_servidor_volta_ao_ar_e_os_municipios_aparecem(self):
+        with socket.create_server(("127.0.0.1", 0)) as livre:
+            porta = livre.getsockname()[1]
+        janela = self.abrir(porta)
+        self.assertEqual(janela._situacao.get(), MSG_PARADO)
+        self.assertEqual(len(janela._seletor.cget("values")), 1)
+        with servidor_no_ar_em(SERVIDORES, self.certs, porta):
+            self.buscar(janela, "joao")
+        self.assertTrue(janela._lista.get_children())
+        self.assertGreater(len(janela._seletor.cget("values")), 1)
+
+    def test_O_servidor_tem_certificado_de_outra_CA(self):
+        with servidor_no_ar(SERVIDORES, self.certs_de_outra_ca) as (srv, linhas):
+            janela = self.abrir(srv.porta)
+            self.assertEqual(janela._situacao.get(), MSG_NAO_CONFIAVEL)
+            self.buscar(janela, "maria")
+            self.assertEqual(janela._situacao.get(), MSG_NAO_CONFIAVEL)
+            self.assertEqual(janela._lista.get_children(), ())
+        # A janela não envia nada a um servidor não confiável: nenhuma busca chegou a ele.
+        self.assertFalse([linha for linha in linhas if "op=buscar" in linha])
 
 
 class InterfaceIntegracaoTest(unittest.TestCase):

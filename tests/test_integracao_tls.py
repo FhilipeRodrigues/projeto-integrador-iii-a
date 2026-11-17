@@ -25,10 +25,10 @@ def _openssl():
 
 
 @contextlib.contextmanager
-def servidor_no_ar(servidores, pasta_certs):
-    """Sobe o servidor numa porta livre; devolve (servidor, linhas de log)."""
+def servidor_no_ar_em(servidores, pasta_certs, porta):
+    """Sobe o servidor na `porta` dada (0 = livre); devolve (servidor, linhas de log)."""
     linhas = []
-    srv = servidor.Servidor(servidores, pasta_certs, "127.0.0.1", 0, log=linhas.append)
+    srv = servidor.Servidor(servidores, pasta_certs, "127.0.0.1", porta, log=linhas.append)
     srv.iniciar()
     fio = threading.Thread(target=srv.servir)
     fio.start()
@@ -37,6 +37,11 @@ def servidor_no_ar(servidores, pasta_certs):
     finally:
         srv.parar()
         fio.join(timeout=5)
+
+
+def servidor_no_ar(servidores, pasta_certs):
+    """Sobe o servidor numa porta livre; devolve (servidor, linhas de log)."""
+    return servidor_no_ar_em(servidores, pasta_certs, 0)
 
 
 @unittest.skipUnless(_openssl(), "openssl não encontrado; veja a mensagem do script")
@@ -99,7 +104,7 @@ class CanalSeguroTest(unittest.TestCase):
         with servidor_no_ar(self.servidores, self.certs_de_outra_ca) as (srv, _):
             with self.assertRaises(cliente.ErroDeRede) as contexto:
                 self._cliente(srv).consultar({"op": "municipios"})
-        self.assertIn("não é confiável", str(contexto.exception))
+        self.assertIn("Servidor não confiável", str(contexto.exception))
 
     def test_O_cliente_recusa_um_servidor_cujo_certificado_nao_vale_para_o_endereco(self):
         real = socket.create_connection

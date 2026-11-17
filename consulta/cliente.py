@@ -11,6 +11,7 @@ CA_PADRAO = RAIZ / "certs" / "ca.crt"
 HOST_PADRAO = "127.0.0.1"
 PORTA_PADRAO = 8443
 TIMEOUT_S = 5
+CONEXAO_INTERROMPIDA = "A conexão com o servidor foi interrompida. Tente buscar de novo."
 _ERRO_NOME_DIFERENTE = 62  # X509_V_ERR_HOSTNAME_MISMATCH do OpenSSL
 
 
@@ -28,28 +29,36 @@ class ClienteRede:
         """Envia a requisição e devolve a resposta (dicionário). Falhas viram `ErroDeRede`."""
         contexto = self._criar_contexto()
         try:
-            with socket.create_connection((self._host, self._porta), timeout=TIMEOUT_S) as bruto:
-                with contexto.wrap_socket(bruto, server_hostname=self._host) as seguro:
-                    protocolo.escrever_mensagem(seguro, requisicao)
-                    return protocolo.ler_mensagem(seguro.makefile("rb"))
+            bruto = socket.create_connection((self._host, self._porta), timeout=TIMEOUT_S)
+        except TimeoutError as erro:
+            raise ErroDeRede("O servidor demorou demais para responder.") from erro
+        except OSError as erro:
+            raise ErroDeRede(
+                "Não foi possível conectar ao servidor. Verifique se ele está em execução."
+            ) from erro
+        try:
+            with bruto, contexto.wrap_socket(bruto, server_hostname=self._host) as seguro:
+                protocolo.escrever_mensagem(seguro, requisicao)
+                with seguro.makefile("rb") as arquivo:
+                    return protocolo.ler_mensagem(arquivo)
         except ssl.SSLCertVerificationError as erro:
             if erro.verify_code == _ERRO_NOME_DIFERENTE:
                 raise ErroDeRede(
                     f"O certificado do servidor não corresponde ao endereço '{self._host}'."
                 ) from erro
             raise ErroDeRede(
-                "O certificado do servidor não é confiável: não foi emitido pela CA do projeto."
+                "Servidor não confiável: o certificado não foi emitido pela CA do projeto."
             ) from erro
+        except (ssl.SSLEOFError, protocolo.ConexaoEncerrada) as erro:
+            raise ErroDeRede(CONEXAO_INTERROMPIDA) from erro
         except ssl.SSLError as erro:
             raise ErroDeRede("Falha na conexão segura (TLS) com o servidor.") from erro
         except protocolo.ProtocoloErro as erro:
             raise ErroDeRede(f"Resposta inválida do servidor: {erro}.") from erro
         except TimeoutError as erro:
             raise ErroDeRede("O servidor demorou demais para responder.") from erro
-        except OSError as erro:
-            raise ErroDeRede(
-                f"Não foi possível conectar ao servidor em {self._host}:{self._porta}."
-            ) from erro
+        except OSError as erro:  # reset, pipe quebrado: a conexão existia e caiu
+            raise ErroDeRede(CONEXAO_INTERROMPIDA) from erro
 
     def municipios(self) -> list:
         """Nomes dos municípios, em ordem alfabética."""

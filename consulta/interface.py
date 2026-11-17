@@ -78,6 +78,7 @@ class JanelaConsulta:
         self._em_andamento = 0
         self._busca_atual = 0
         self._ficha_atual = 0
+        self._municipios_carregados = False
 
         raiz.title(TITULO)
         raiz.minsize(760, 640)
@@ -85,19 +86,24 @@ class JanelaConsulta:
         self._montar()
         self._agendamento = raiz.after(INTERVALO_FILA_MS, self._drenar_fila)
         raiz.bind("<Destroy>", self._ao_destruir)
-        self._executar(self._cliente.municipios, self._mostrar_municipios)
+        self._carregar_municipios()
 
     def aguardando(self) -> bool:
         """Há consulta de rede em andamento ou resultado ainda não aplicado à janela."""
         return self._em_andamento > 0
 
     def buscar(self) -> None:
+        if self._botao_buscar.instate(["disabled"]):
+            return  # já há uma busca em andamento (Enter no campo não passa pelo botão)
         nome = self._nome.get()
         escolhido = self._municipio.get()
         municipio = None if escolhido == TODOS_OS_MUNICIPIOS else escolhido
         self._busca_atual += 1
         numero = self._busca_atual
         self._limpar_ficha()
+        self._botao_buscar.state(["disabled"])
+        if not self._municipios_carregados:
+            self._carregar_municipios(silencioso=True)  # o servidor pode ter voltado
         self._executar(
             lambda: self._cliente.buscar(nome, municipio),
             lambda resultado, erro: self._mostrar_resultados(numero, resultado, erro),
@@ -136,9 +142,8 @@ class JanelaConsulta:
             state="readonly", width=24,
         )
         self._seletor.grid(row=1, column=2, sticky="ew")
-        ttk.Button(formulario, text="Buscar", command=self.buscar).grid(
-            row=1, column=3, sticky="e", padx=(12, 0)
-        )
+        self._botao_buscar = ttk.Button(formulario, text="Buscar", command=self.buscar)
+        self._botao_buscar.grid(row=1, column=3, sticky="e", padx=(12, 0))
 
         corpo = ttk.Frame(raiz, padding=(12, 0))
         corpo.grid(row=2, column=0, sticky="nsew")
@@ -210,19 +215,29 @@ class JanelaConsulta:
         if evento.widget is self._raiz:
             self._raiz.after_cancel(self._agendamento)
 
-    def _mostrar_municipios(self, municipios, erro) -> None:
+    def _carregar_municipios(self, silencioso=False) -> None:
+        """Pede os municípios; `silencioso` não avisa da falha (a busca que o acompanha avisa)."""
+        self._executar(
+            self._cliente.municipios,
+            lambda municipios, erro: self._mostrar_municipios(municipios, erro, silencioso),
+        )
+
+    def _mostrar_municipios(self, municipios, erro, silencioso=False) -> None:
         if erro is not None:
-            self._mostrar_erro(erro)
+            if not silencioso:
+                self._mostrar_erro(erro)
             return
+        self._municipios_carregados = True
         self._seletor.configure(values=[TODOS_OS_MUNICIPIOS, *municipios])
 
     def _mostrar_resultados(self, numero, servidores, erro) -> None:
         if numero != self._busca_atual:
             return  # uma busca mais nova já foi pedida
+        self._botao_buscar.state(["!disabled"])
+        self._lista.delete(*self._lista.get_children())
         if erro is not None:
             self._mostrar_erro(erro)
             return
-        self._lista.delete(*self._lista.get_children())
         for servidor in servidores:
             self._lista.insert(
                 "", "end", iid=str(servidor["id"]), values=(servidor["nome"], servidor["municipio"])
@@ -260,7 +275,6 @@ class JanelaConsulta:
         self._dica_ficha.grid()
 
     def _mostrar_erro(self, erro) -> None:
-        # O tratamento detalhado de falhas de rede e de certificado é da task 11.
         if isinstance(erro, rede.ErroDeRede):
             self._situacao.set(str(erro))
         else:

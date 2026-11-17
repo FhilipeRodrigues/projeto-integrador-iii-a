@@ -15,6 +15,10 @@ class ProtocoloErro(ValueError):
     """A mensagem recebida não cumpre o formato do protocolo."""
 
 
+class ConexaoEncerrada(ProtocoloErro):
+    """O outro lado fechou o canal antes de enviar a mensagem."""
+
+
 class LinhaGrandeDemais(ProtocoloErro):
     """A linha passou de `LIMITE_LINHA`; o restante dela ainda está no canal."""
 
@@ -36,7 +40,7 @@ def ler_mensagem(arquivo) -> dict:
     """Lê uma linha de um arquivo binário (ex.: `soquete.makefile('rb')`) e a decodifica."""
     linha = arquivo.readline(LIMITE_LINHA + 1)
     if not linha:
-        raise ProtocoloErro("a conexão foi encerrada sem enviar mensagem")
+        raise ConexaoEncerrada("a conexão foi encerrada sem enviar mensagem")
     if len(linha) > LIMITE_LINHA:
         raise LinhaGrandeDemais("a mensagem é grande demais")
     if not linha.endswith(b"\n"):
