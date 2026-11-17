@@ -5,7 +5,9 @@ import socket
 import ssl
 import tempfile
 import threading
+import time
 import unittest
+from concurrent import futures
 from pathlib import Path
 from unittest import mock
 
@@ -312,6 +314,57 @@ class CanalSeguroTest(unittest.TestCase):
                         except (ssl.SSLError, ConnectionError):
                             recebido = b""  # conexão encerrada pelo servidor
                 self.assertEqual(recebido, b"")  # servidor encerrou; o recv não estourou o prazo de 4 s
+
+    def _buscas_simultaneas(self, srv, termos):
+        """Dispara uma busca por termo, todas liberadas juntas; devolve os resultados na ordem."""
+        largada = threading.Barrier(len(termos))
+
+        def buscar(termo):
+            largada.wait(timeout=5)
+            return self._cliente(srv).buscar(termo)
+
+        with futures.ThreadPoolExecutor(max_workers=len(termos)) as piscina:
+            return [f.result(timeout=10) for f in [piscina.submit(buscar, t) for t in termos]]
+
+    def test_Dois_clientes_consultam_ao_mesmo_tempo(self):
+        termos = [self.servidores[0]["nome"].split()[0], self.servidores[1]["nome"].split()[-1]]
+        with servidor_no_ar(self.servidores, self.certs) as (srv, _):
+            resultados = self._buscas_simultaneas(srv, termos)
+        for termo, lista in zip(termos, resultados):
+            esperado = dominio.buscar(self.servidores, termo, None)
+            self.assertTrue(esperado)
+            self.assertEqual(lista, esperado)
+
+    def test_Muitos_clientes_consultam_ao_mesmo_tempo(self):
+        termos = [s["nome"].split()[0] for s in self.servidores[:10]]
+        with servidor_no_ar(self.servidores, self.certs) as (srv, _):
+            resultados = self._buscas_simultaneas(srv, termos)
+        self.assertEqual(len(resultados), 10)
+        for termo, lista in zip(termos, resultados):
+            esperado = dominio.buscar(self.servidores, termo, None)
+            self.assertTrue(esperado)
+            self.assertEqual(lista, esperado)
+
+    def test_Um_cliente_lento_nao_bloqueia_os_outros(self):
+        with servidor_no_ar(self.servidores, self.certs) as (srv, _):
+            # Conexão aberta, sem iniciar o aperto de mão TLS: ocupa a thread dela, só.
+            with socket.create_connection(("127.0.0.1", srv.porta), timeout=5):
+                time.sleep(0.2)  # dá tempo de o servidor aceitar a conexão lenta
+                inicio = time.perf_counter()
+                lista = self._cliente(srv).buscar("")
+                decorrido = time.perf_counter() - inicio
+        self.assertEqual(len(lista), 50)
+        self.assertLess(decorrido, servidor.TIMEOUT_S / 2)  # não esperou o prazo do cliente lento
+
+    def test_A_busca_responde_em_ate_1_segundo(self):
+        with servidor_no_ar(self.servidores, self.certs) as (srv, _):
+            tempos = []
+            for _ in range(3):  # a menor de 3 amostras evita falha por oscilação da máquina
+                inicio = time.perf_counter()
+                lista = self._cliente(srv).buscar("")  # conexão + aperto de mão + busca + resposta
+                tempos.append(time.perf_counter() - inicio)
+        self.assertEqual(len(lista), 50)
+        self.assertLessEqual(min(tempos), 1.0)
 
     @staticmethod
     def _esperar(linhas, segundos=5):
