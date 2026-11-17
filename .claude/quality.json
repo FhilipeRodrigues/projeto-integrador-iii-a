@@ -1,0 +1,7 @@
+{
+  "extensions": [".py"],
+  "verify": [
+    { "run": "python -m unittest discover -s tests -v", "paths": ["consulta/", "scripts/", "tests/", "data/"] },
+    { "run": "python -m compileall -q consulta scripts tests", "paths": ["consulta/", "scripts/", "tests/"] }
+  ]
+}
