@@ -2,7 +2,7 @@
 
 - **Data:** 2026-11-16
 - **PRD:** [prd.md](prd.md)
-- **Status:** aprovado (2026-11-16)
+- **Status:** aprovado (2026-11-16). **Revisão 2026-11-18** (seção "Revisão 2026-11-18"): aprovada pelo estudante em 2026-11-18.
 
 ## Visão geral
 
@@ -161,6 +161,80 @@ Qualquer erro de uma conexão afeta só ela. O servidor continua atendendo (RF-1
 - **Gerador:** `test_gerar_base.py` roda o gerador duas vezes e compara os resultados byte a byte, depois valida a base com `base.py` (RF-01).
 - **Dependências:** `test_sem_dependencias_externas.py` percorre os imports de `consulta/` e `scripts/` com `ast` e confere cada um contra `sys.stdlib_module_names` (RNF-04).
 
+## Revisão 2026-11-18: nomes, solicitações e decisão
+
+Cobre RF-01 (revisado), RF-15 a RF-18 e RNF-07 do PRD. O resto do documento continua valendo, com as exceções listadas aqui: **a base de servidores segue somente leitura, mas o servidor passa a ter um estado que muda (as decisões), guardado em arquivo.**
+
+### Componentes tocados
+
+| Camada | Arquivo / módulo | Mudança |
+|---|---|---|
+| Dados | `scripts/gerar_base.py` | Listas de 25 nomes masculinos e 25 femininos (do `nomes-comuns.txt`, embutidas no script: o arquivo tem numeração e "Sofia / Sophia", e ler texto livre seria mais frágil que uma lista no código). Cada nome é usado uma vez, embaralhado com a semente fixa entre os 50 lugares. Dois sobrenomes diferentes sorteados dos 14 atuais. O sexo vem da lista do nome. O gerador repete o embaralhamento (mesma semente, determinístico) até Antônio e Antônia ficarem em municípios diferentes, e Francisco e Francisca também. |
+| Dados | `data/servidores.json` | Regenerado. O `joana` deixa de existir; o README passa a usar `maria`. |
+| Estado | `consulta/solicitacoes.py` (novo) | `Solicitacoes`: carrega ou sorteia `data/solicitacoes.json`, lista, obtém e decide. Um `threading.Lock` protege a decisão e a gravação. |
+| Domínio | `consulta/dominio.py` | `montar_documento(servidor, solicitacao)`; `montar_ficha` ganha o campo `situacao_solicitacao`. |
+| Protocolo | `consulta/protocolo.py`, `servidor.py` | Operações `solicitacoes`, `documento` e `decidir`. Opção `--solicitacoes` (caminho do arquivo, padrão `data/solicitacoes.json`). |
+| Cliente (rede) | `consulta/cliente.py` | Métodos `solicitacoes`, `documento` e `decidir`. |
+| Cliente (UI) | `consulta/interface.py` | `ttk.Notebook` com as abas "Consulta" (a janela atual, sem mudar de comportamento) e "Solicitações" (lista, documento e botões). A ficha ganha a linha "Situação da solicitação". |
+| Infra | `.gitignore`, `README.md` | `data/solicitacoes.json` ignorado; README explica como zerar as decisões (apagar o arquivo). |
+
+### Modelo de dados
+
+`data/solicitacoes.json`, criado pelo servidor na primeira execução e **não versionado** (é estado, e mudaria a cada decisão):
+
+```json
+{
+  "ficticio": true,
+  "solicitacoes": [
+    {"id": 1, "numero": "REQ-2026-0001", "servidor_id": 17, "municipio": "Anápolis", "situacao": "pendente", "decidida_em": null}
+  ]
+}
+```
+
+- `situacao`: `pendente`, `aprovada` ou `desaprovada`. `decidida_em`: data e hora da última decisão (`AAAA-MM-DDTHH:MM:SS`), ou `null`.
+- **Sorteio:** `random.SystemRandom` (não reproduzível, de propósito, pois o pedido é sortear), uma vez só. São 10 solicitações, **uma por município**, com o servidor sorteado entre os 5 do município. A ordem de numeração também é sorteada. Isso cumpre "permutado entre municípios e servidores" sem repetir município.
+- **Validação ao carregar:** `id` único, `servidor_id` existente na base e com o mesmo `municipio` gravado, `situacao` válida, `decidida_em` coerente. Se inválido, o servidor não sobe e diz o motivo. Arquivo apagado = novo sorteio.
+- **Migração e reversão:** não há dado existente a migrar. `data/servidores.json` é regenerado (versionado, então reversível pelo git) e `data/solicitacoes.json` é novo, criado ao subir o servidor. **Regenerar a base depois de gravar as solicitações faria elas apontarem para outros servidores.** Por isso cada solicitação guarda também o `municipio`, e o servidor recusa subir se ele não bater com o do `servidor_id` (a validação acima). Ao regenerar a base, apague `data/solicitacoes.json`; o README avisa.
+- **Gravação (RNF-07):** com o lock, grava em arquivo temporário na mesma pasta e troca com `os.replace`. Se a gravação falhar, a situação em memória não muda e o cliente recebe `ERRO_INTERNO`.
+
+### Contratos de API (novos)
+
+| `op` | Entrada | Resposta de sucesso |
+|---|---|---|
+| `solicitacoes` | — | lista ordenada por número: `{"id", "numero", "servidor_nome", "municipio", "situacao"}` |
+| `documento` | `id` (inteiro) | `{"id", "numero", "situacao", "decidida_em", "municipio", "orgao", "servidor_nome", "sexo", "data_ingresso", "data_solicitacao"}` |
+| `decidir` | `id` (inteiro) e `decisao` (`aprovada` ou `desaprovada`) | o mesmo objeto de `documento`, já atualizado |
+
+- `ficha` ganha `situacao_solicitacao`: `null` (servidor sem solicitação) ou a situação.
+- Erros: `id` ou `decisao` inválidos dão `REQUISICAO_INVALIDA`; solicitação inexistente dá `NAO_ENCONTRADO`. O `documento` **não leva** a data de nascimento, a idade, o tempo de contribuição, PCD, doença nem remuneração: esses dados o analista confere na aba "Consulta" (é o que o vídeo mostra). Nenhum campo indica elegibilidade (RF-09).
+- O log registra `op=decidir resultado=ok`, sem nome de servidor.
+
+### Decisões
+
+- **Um estado só, no servidor.** O cliente não guarda nada: a situação vem sempre do servidor, então é a mesma em qualquer janela e depois de reiniciar.
+- **Arquivo JSON e não banco**, pelo mesmo motivo da base (RNF-04). A escrita atômica evita arquivo pela metade.
+- **Texto do documento montado no cliente**, a partir dos campos recebidos (modelo de ofício com concordância de gênero, "o servidor" ou "a servidora", pelo campo `sexo`). O servidor entrega dados, não layout. Modelo: "Requerimento de aposentadoria nº …, ao Setor de Pessoal da Prefeitura Municipal de …, o servidor … lotado em …, ingressado em …, requer a concessão de aposentadoria voluntária e a análise do ato pelo TCM-GO. Nestes termos, pede deferimento", com local, data da solicitação e assinatura. Rodapé: "Documento fictício, para demonstração".
+- **Decisão reversível.** Aprovar e Desaprovar ficam sempre ativos e a última vale, para poder gravar o vídeo mais de uma vez. Zerar tudo é apagar o arquivo.
+- **Sem confirmação em diálogo** ao decidir, para a demonstração fluir.
+- **Sem autenticação** em `decidir`: qualquer cliente que confie na CA decide. Registrado como fora de escopo no PRD.
+- **A aba Consulta não muda** de comportamento. Só entra num `Notebook`, e ganha uma linha na ficha.
+
+### Riscos
+
+- **Refatorar a janela para abas pode quebrar os 26 testes da interface.** Mitigação: a task 15 só move o conteúdo atual para a primeira aba e roda os testes antes de acrescentar a segunda.
+- **Mudar a base quebra testes e documentação que citam nomes** (`joana`, as capturas do resumo). Mitigação: a task 13 troca as referências e roda tudo; os testes com base própria não são afetados.
+- **Duas decisões ao mesmo tempo.** Mitigação: lock e teste de concorrência.
+- **Arquivo corrompido à mão.** Mitigação: validação ao carregar e mensagem clara.
+- **O sorteio não ser reproduzível** pode surpreender na demonstração. Mitigação: o arquivo gravado mantém os mesmos 10 documentos entre execuções, e o README diz como sortear de novo.
+
+### Estratégia de teste
+
+- `test_gerar_base.py`: 25 e 25, cada nome uma vez, sexo coerente, sobrenomes diferentes, mesmos bytes ao gerar duas vezes, Antônio e Antônia (e Francisco e Francisca) em municípios diferentes.
+- `test_solicitacoes.py` (novo): 10 solicitações, uma por município, servidores distintos, todas pendentes; recarregar reutiliza; decidir grava e sobrevive ao recarregar; arquivo inválido recusado; decisões simultâneas sem perda; falha de gravação não muda a memória.
+- `test_integracao_tls.py`: as três operações novas, os erros, o `documento` sem dados vedados, `ficha` com `situacao_solicitacao`, e reiniciar o servidor mantendo a decisão.
+- `test_interface.py` (cliente falso): abas, lista, documento, concordância de gênero, botões, atualização de lista e ficha após decidir, erro de rede. Verificação manual e captura de tela do fluxo completo.
+- Estado fora do git: `git check-ignore data/solicitacoes.json`.
+
 ## Rastreio
 
 | RF | Componentes | Como testar |
@@ -187,3 +261,9 @@ Qualquer erro de uma conexão afeta só ela. O servidor continua atendendo (RF-1
 | RNF-06 | `scripts/gerar_certificados.py` | teste gera os certificados duas vezes em pastas temporárias e verifica com `openssl verify` |
 | RP-03 a RP-05 | `docs/relatorio/`, `README.md`, roteiro do vídeo | conferência manual contra a lista do PRD (fora do código) |
 | RP-01, RP-02, RP-06 | documentos e envios do estudante | acompanhados no checkpoint; não são tarefas de código |
+| RF-01 (rev.) | `scripts/gerar_base.py`, `data/servidores.json` | testes do gerador (nomes, sexo, sobrenomes, determinismo, nomes parecidos em municípios diferentes) |
+| RF-15 | `consulta/solicitacoes.py`, `data/solicitacoes.json` | `test_solicitacoes.py`: 10, uma por município, pendentes, reutilizadas ao reiniciar |
+| RF-16 | operações `solicitacoes` e `documento`, aba "Solicitações" em `interface.py` | integração das operações; teste da janela com o documento e a concordância de gênero |
+| RF-17 | operação `decidir`, botões em `interface.py` | integração e teste da janela: aprovar, desaprovar e trocar a decisão |
+| RF-18 | `solicitacoes.py`, `montar_ficha`, lista, documento e ficha | integração reiniciando o servidor; teste da ficha com a situação |
+| RNF-07 | `solicitacoes.py`, `.gitignore` | teste de concorrência, de arquivo inválido e de falha de gravação; `git check-ignore` |

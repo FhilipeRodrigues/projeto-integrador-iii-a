@@ -1,7 +1,7 @@
 # PRD: Consulta de servidores municipais para apoio à análise de aposentadoria (TCM-GO)
 
 - **Data:** 2026-11-16
-- **Status:** aprovado (2026-11-16)
+- **Status:** aprovado (2026-11-16). **Revisão 2026-11-18** (RF-01 alterado, RF-02 e RF-09 ajustados, RF-15 a RF-18 e RNF-07 novos): aprovada pelo estudante em 2026-11-18.
 
 ## Problema
 Na Secretaria de Atos de Pessoal do TCM-GO, a análise de aposentadorias exige consultar a situação funcional de servidores de vários municípios (idade, tempo de serviço, órgão, remuneração e condições especiais). Hoje essa consulta depende de procurar as informações em fontes separadas, o que é lento e sujeito a erro. A proposta do Projeto Integrador III-A pede um protótipo de consulta de informações em arquitetura cliente-servidor, com comunicação protegida, validado com um representante da instituição (Juliana, chefe direta do estudante).
@@ -24,23 +24,29 @@ O protótipo usa uma base **fictícia** (10 municípios, cerca de 50 servidores)
 - Como analista, quero abrir a ficha do servidor escolhido, para ver os dados necessários à análise de aposentadoria. (RF-02, RF-07, RF-08)
 - Como analista, quero usar o sistema com vários clientes abertos ao mesmo tempo, para que a consulta de um colega não bloqueie a minha. (RF-11)
 - Como avaliador, quero ver que a comunicação é cifrada e que o cliente só confia no servidor legítimo, para verificar o requisito de segurança. (RF-14)
+- Como analista, quero abrir o requerimento de aposentadoria de um servidor, conferir os dados dele na consulta e então aprová-lo ou desaprová-lo, e ver essa decisão registrada mesmo depois de reiniciar o sistema. (RF-15 a RF-18)
 - Como estudante, quero cumprir as etapas de documentos, demonstração e entregas no prazo. (RP-01 a RP-06)
 
 ## Requisitos funcionais
-- **RF-01:** O sistema deve dispor de uma base fictícia de 10 municípios e cerca de 50 servidores, gerada de forma reproduzível (a mesma geração produz sempre a mesma base).
-- **RF-02:** A ficha do servidor deve exibir: nome completo, sexo, idade, órgão de atuação, PCD (sim ou não), doença profissional ou acidente de trabalho (sim ou não e, se sim, qual), data de ingresso, data da solicitação, última remuneração e tempo de contribuição.
+- **RF-01:** O sistema deve dispor de uma base fictícia de 10 municípios e 50 servidores, gerada de forma reproduzível (a mesma geração produz sempre a mesma base). Os 50 primeiros nomes são os 25 masculinos e os 25 femininos mais comuns do Brasil (lista do estudante), cada um usado uma única vez e distribuído aleatoriamente entre os municípios. Cada servidor recebe dois sobrenomes comuns diferentes entre si, sorteados. O sexo do servidor acompanha o nome.
+- **RF-02:** A ficha do servidor deve exibir: nome completo, sexo, idade, órgão de atuação, PCD (sim ou não), doença profissional ou acidente de trabalho (sim ou não e, se sim, qual), data de ingresso, data da solicitação, última remuneração e tempo de contribuição. Quando o servidor tiver uma solicitação de aposentadoria (RF-15), a ficha exibe também a situação dela (RF-18).
 - **RF-03:** O sistema deve buscar servidores por trecho do nome, ignorando acentos e diferença entre maiúsculas e minúsculas. Com o nome vazio, a busca lista todos os servidores (respeitando o filtro de município, RF-04).
 - **RF-04:** O sistema deve permitir filtrar a busca por município. Sem filtro, a busca considera todos os municípios. O filtro combina com o nome. A lista de municípios disponível vem do servidor.
 - **RF-05:** O resultado da busca deve ser uma lista com nome e município de cada servidor encontrado. Ao selecionar um item, o sistema exibe a ficha completa (RF-02).
 - **RF-06:** Quando a busca não encontrar nenhum servidor, o cliente deve exibir uma mensagem clara de "nenhum resultado", sem erro.
 - **RF-07:** O tempo de contribuição deve ser a diferença entre a data da solicitação e a data de ingresso, em anos inteiros completos (parte inteira, sem arredondar para cima). Simplificação aceita.
 - **RF-08:** A idade deve ser calculada, em anos completos, a partir da data de nascimento do servidor até a **data da solicitação**, e não armazenada como valor fixo.
-- **RF-09:** O sistema deve apresentar apenas os dados da ficha. Não deve indicar se o servidor atende ou não aos requisitos de aposentadoria.
+- **RF-09:** O sistema não deve calcular nem indicar se o servidor atende ou não aos requisitos de aposentadoria. A ficha traz os dados do servidor, e a situação de uma solicitação (RF-18) é apenas o registro da decisão tomada pelo usuário (RF-17), nunca uma conclusão do sistema.
 - **RF-10:** O sistema deve ser dividido em servidor (guarda a base, recebe consultas e devolve resultados) e cliente (interface gráfica de janela, simples, que envia as consultas pela rede e apresenta as respostas de forma organizada).
 - **RF-11:** O servidor deve atender mais de um cliente ao mesmo tempo.
 - **RF-12:** Se o servidor estiver indisponível ou a conexão cair, o cliente deve informar o problema ao usuário, sem travar nem encerrar.
 - **RF-13:** Se o servidor receber uma solicitação inválida, deve responder com erro e continuar atendendo os demais clientes.
 - **RF-14:** A comunicação entre cliente e servidor deve ser cifrada. O cliente deve confiar apenas em servidor cujo certificado tenha sido emitido pela Autoridade Certificadora (CA) local do projeto, e deve recusar a conexão e informar o usuário caso contrário.
+
+- **RF-15:** O servidor deve manter 10 solicitações de aposentadoria fictícias, cada uma de um servidor diferente da base, sorteados aleatoriamente entre todos os municípios. O sorteio acontece uma única vez: o resultado é gravado em `data/solicitacoes.json` e reutilizado nas execuções seguintes, até o arquivo ser apagado. Cada solicitação nasce com a situação "Pendente".
+- **RF-16:** O cliente deve ter uma aba "Solicitações", ao lado da aba "Consulta". Ela lista as solicitações (número, servidor, município e situação) e, ao selecionar uma, exibe um documento formal fictício de requerimento de aposentadoria, com o número, o município, o órgão, o nome do servidor, a data de ingresso, a data da solicitação e o texto do pedido. O documento não traz os dados que o analista deve conferir na aba "Consulta" (idade, tempo de contribuição, PCD, doença profissional e remuneração) nem indica elegibilidade.
+- **RF-17:** O documento deve ter os botões "Aprovar" e "Desaprovar". A decisão é enviada ao servidor e pode ser trocada depois (para repetir a demonstração).
+- **RF-18:** A situação de cada solicitação (Pendente, Aprovada ou Desaprovada) deve ser **persistente**: fica gravada em `data/solicitacoes.json`, sobrevive a reiniciar o servidor e aparece na lista de Solicitações, no documento e na ficha do servidor (aba "Consulta").
 
 ## Requisitos não funcionais
 - **RNF-01 (dados):** A base e a interface não devem conter dados reais de pessoas ou do TCM-GO. A interface deve indicar que os dados são fictícios.
@@ -49,6 +55,7 @@ O protótipo usa uma base **fictícia** (10 municípios, cerca de 50 servidores)
 - **RNF-04 (execução):** O sistema deve rodar em ambiente local, sem hospedagem e sem banco de dados, e ser executado a partir das instruções do README, sem instalar bibliotecas externas além da própria linguagem.
 - **RNF-05 (vídeo):** A interface deve ser legível em gravação de tela, com fonte de pelo menos 12 pt.
 - **RNF-06 (reprodutibilidade):** Os certificados devem poder ser gerados novamente por script, seguindo o README.
+- **RNF-07 (integridade do arquivo):** A gravação de `data/solicitacoes.json` não pode deixá-lo corrompido nem permitir que duas decisões simultâneas se percam. O arquivo não é versionado (é estado da execução); o servidor o cria sozinho se não existir e recusa subir se ele estiver inválido.
 
 ## Requisitos de processo
 - **RP-01:** Carta de Início das Atividades, Termo de Formalização do Convênio e Termo de Participação e Responsabilidade devem ser assinados por gov.br e enviados na Plataforma A até 23/11/2026, 23h59. A Carta é assinada pelo estudante e pelo professor. Os dois termos, pelo estudante e pela Juliana.
@@ -62,7 +69,8 @@ O protótipo usa uma base **fictícia** (10 municípios, cerca de 50 servidores)
 - Autenticação e perfis de usuário (melhoria futura).
 - Indicação de elegibilidade à aposentadoria ou qualquer regra previdenciária.
 - Banco de dados, hospedagem e implantação definitiva na infraestrutura do TCM-GO.
-- Cadastro, edição ou exclusão de servidores pelo cliente (somente consulta).
+- Cadastro, edição ou exclusão de servidores pelo cliente. A base de servidores é somente leitura; o cliente só registra a decisão das solicitações (RF-17).
+- Autenticação de quem aprova ou desaprova: qualquer cliente que confie na CA do projeto pode decidir (protótipo fictício).
 - Dados reais de servidores e integração com sistemas do TCM-GO.
 - Interface web ou em linha de comando como cliente principal.
 - Demonstração com o cliente em outro computador.

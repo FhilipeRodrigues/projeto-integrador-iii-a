@@ -1,64 +1,52 @@
 # Check Spec: Consulta de servidores municipais (TCM-GO)
 
-- **Data:** 2026-11-16
+- **Data:** 2026-11-18 (2ª rodada, após a revisão que criou as tasks 13 a 16; a 1ª rodada, de 2026-11-16, aprovou as tasks 01 a 12)
 - **Veredito:** aprovado
-- **Arquivos conferidos:** `prd.md`, `techspec.md`, `tasks.md`, `tasks/01-base-ficticia` a `tasks/12-readme-execucao` (12 arquivos `.md` e 12 `.feature`)
+- **Arquivos conferidos:** `prd.md`, `techspec.md`, `tasks.md`, `tasks/01-base-ficticia` a `tasks/16-aprovar-desaprovar` (16 arquivos `.md` e 16 `.feature`)
 
 Os cruzamentos de IDs (RF, RNF, tags, dependências, índice) foram feitos por script sobre os arquivos inteiros, e não só pelo `tasks.md`.
 
 ## Bloqueantes
 
-Nenhum. As 9 verificações bloqueantes passaram, mais a de tags (#13):
+Nenhum no estado final. A rodada achou 2, ambos corrigidos antes do veredito (a correção foi feita pelo autor da revisão, não por esta skill):
+
+| # | Achado | Correção |
+|---|---|---|
+| 1 | PRD e TechSpec diziam "aguardando aprovação" na revisão de 2026-11-18 | Estudante aprovou em 2026-11-18; as duas linhas de status foram atualizadas |
+| 9 | O TechSpec só dizia "sem migração" para a base antiga. A revisão regenera `servidores.json` e cria `solicitacoes.json`, e regenerar a base depois de gravar solicitações faria elas apontarem para outros servidores | Seção "Revisão 2026-11-18" ganhou "Migração e reversão" e o campo `municipio` em cada solicitação, conferido ao carregar |
+
+As demais verificações bloqueantes passaram:
 
 | # | Resultado |
 |---|---|
-| 1 | PRD e TechSpec com status `aprovado (2026-11-16)` |
-| 2 | As 2 questões abertas do PRD são `não bloqueante` (assinatura da Carta pelo estudante; data da demonstração) |
-| 3 | Os 14 RF e os 6 RNF do PRD aparecem na tabela de rastreio do TechSpec |
-| 4 | Todo RF tem ao menos uma task e um cenário com `@RF-NN` (ver cobertura) |
-| 5 | Nenhuma task cita RF ou RNF inexistente. Os requisitos de cada task coincidem com as tags dos cenários e com o índice |
-| 6 | Cada task tem exatamente um `.feature`, com `# language: pt` e um só `Funcionalidade:`. Os links apontam para o arquivo certo |
-| 7 | `depende` só aponta para tasks anteriores existentes, sem ciclo |
-| 8 | Os comandos existem: `python -m unittest`, `python -m compileall` e `git check-ignore` funcionam nesta máquina. Ver aviso A |
-| 9 | O TechSpec declara "sem dados existentes e sem migração" |
-| 13 | Os 69 cenários têm exatamente uma tag de camada e uma tag de requisito |
+| 2 | As 2 questões abertas do PRD são `não bloqueante` |
+| 3 | Os 18 RF e os 7 RNF do PRD aparecem na tabela de rastreio do TechSpec |
+| 4 | Todo RF e RNF tem ao menos uma task e um cenário com a tag correspondente (RF-07 e RF-08 estão em "Esquema do Cenário" na task 02) |
+| 5 | Nenhuma task cita requisito inexistente. Os requisitos de cada task coincidem com as tags dos seus cenários |
+| 6 | Cada task tem exatamente um `.feature`, com `# language: pt` e um só `Funcionalidade:` |
+| 7 | `depende` só aponta para tasks anteriores existentes, sem ciclo (13 depende de 01; 14 de 06 e 13; 15 de 10, 11 e 14; 16 de 14 e 15) |
+| 8 | `python -m unittest`, `python -m compileall` e `.claude/quality.json` existem. Ver aviso A |
+| 13 | Os cenários das tasks 13 a 16 têm exatamente uma tag de camada e uma de requisito |
 
 ## Avisos
 
-- **[#8] A. Os comandos de validação ainda não têm onde rodar.**
-  - Não há `pyproject.toml`, `package.json` nem `.claude/quality.json`.
-  - As pastas `consulta/`, `scripts/` e `tests/` ainda não existem, então `compileall` e `unittest discover -s tests` falham até a task 01 criá-las.
-  - A task 01 cria as três, então não bloqueia.
-  - O agente `task-reviewer` lê os checks do `.claude/quality.json`. Sem esse arquivo, ele não terá o que rodar. Sugiro criá-lo na task 01 com os dois comandos de teste e de sintaxe.
-- **[#10] B. Task 05 é a maior.** Reúne protocolo, servidor TLS, cliente, log e 7 cenários, em cerca de 5 arquivos. Cabe em um contexto, mas é o ponto de maior risco. Se estourar, dividir em "canal TLS e operação `municipios`" e "recusa de certificado e log".
-- **[#10] C. Task 09 tem 9 cenários**, a maior contagem. Tem um só comportamento (buscar e listar), então não é problema, só um sinal de que o contexto vai ficar cheio.
-- **[#11] D. RNF-04 só é verificado na task 12.** O teste de imports e o README ficam no fim. Se algum import externo entrar antes, só será pego lá. Opcional: mover o teste de imports para a task 01.
-- **[#12] E. Detalhe de protocolo em cenários.** A task 07 cita "JSON" e os códigos `REQUISICAO_INVALIDA`, `OPERACAO_DESCONHECIDA`, `NAO_ENCONTRADO`. É o contrato definido no TechSpec e fica aceitável. Não há seletor, nome de função nem classe em nenhum `.feature`.
-- **[#2] F. Pendências do estudante, fora do código.** Como assinar a Carta pelo estudante e marcar a data da demonstração à Juliana (prazo antes de 26/11). Não travam as tasks.
+- **[#8] A.** `git check-ignore data/solicitacoes.json` só passa depois que a task 14 acrescenta a linha ao `.gitignore`. Antes disso o comando falha, o que é esperado.
+- **[#10] B. Task 16 é a maior.** Reúne servidor (`decidir`), cliente, botões, ficha e 12 cenários, em cerca de 8 arquivos. Tem um só comportamento (decidir e ver a decisão), mas se estourar o contexto, dividir em "decidir no servidor e persistir" e "botões e situação na ficha".
+- **[#10] C. Task 14 tem 11 cenários** e a task 15 mexe no arquivo da janela inteira. A 15 deve mover a tela atual para a aba e rodar os testes antes de acrescentar a nova aba (já está na task).
+- **[#12] D.** Os `.feature` das tasks 14 e 16 citam os códigos de erro `NAO_ENCONTRADO`, `REQUISICAO_INVALIDA` e `ERRO_INTERNO`, o `.gitignore` e o nome do arquivo. É o contrato do TechSpec, como nas tasks 06 e 07, e fica aceitável.
+- **[#10] E.** As tasks 13 a 16 alteram testes das tasks 01 a 12 (nomes da base, lista exata de campos da ficha, janela em abas). Isso é esperado, e a `execute-task` roda a suíte inteira.
+- **[#2] F. Pendências do estudante, fora do código:** como assinar a Carta pelo estudante e marcar a data da demonstração à Juliana.
 
 ## Cobertura
 
-| Requisito | Tasks | Cenários |
+| Requisito | Tasks | Cenários (13 a 16 contados por tag) |
 |---|---|---|
-| RF-01 | 01 | 4 |
-| RF-02 | 02, 06, 10 | 7 |
-| RF-03 | 03, 06 | 8 |
-| RF-04 | 03, 06, 09 | 6 |
-| RF-05 | 09, 10 | 7 |
-| RF-06 | 09 | 1 |
-| RF-07 | 02 | 1 (esquema com 3 exemplos) |
-| RF-08 | 02 | 1 (esquema com 5 exemplos) |
-| RF-09 | 02, 06, 10 | 3 |
-| RF-10 | 05, 06 | 2 |
-| RF-11 | 08 | 3 |
-| RF-12 | 05, 11 | 6 |
-| RF-13 | 07 | 5 |
-| RF-14 | 04, 05, 11 | 11 |
-| RNF-01 | 01, 09 | 2 |
-| RNF-02 | 04 | 1 |
-| RNF-03 | 08 | 1 |
-| RNF-04 | 12 | 6 |
-| RNF-05 | 09 | 1 |
-| RNF-06 | 04 | 2 |
-
-Requisitos de processo RP-01 a RP-06: fora das tasks de código por decisão do estudante (RP-04 coberto pela task 12). O relatório e o roteiro do vídeo ficam para depois do sistema pronto.
+| RF-01 | 01, 13 | 4 + 7 |
+| RF-02 | 02, 06, 10 | task 16 mostra a situação na ficha, sob o RF-18 |
+| RF-09 | 02, 06, 10, 16 | 1 na task 16 |
+| RF-12 | 05, 11, 15, 16 | 1 na 15 e 1 na 16 |
+| RF-15 | 14 | 5 |
+| RF-16 | 14, 15 | 3 na 14 e 7 na 15 |
+| RF-17 | 16 | 5 |
+| RF-18 | 16 | 3 |
+| RNF-07 | 14, 16 | 2 na 14 e 2 na 16 |
