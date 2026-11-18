@@ -1,0 +1,265 @@
+<!doctype html>
+<html lang="pt-BR">
+<head>
+<meta charset="utf-8">
+<title>Resumo do projeto: Consulta de servidores municipais (PI III-A)</title>
+<style>
+  @page { size: A4; margin: 16mm 16mm 16mm 16mm; }
+  * { box-sizing: border-box; }
+  body { font-family: Arial, Helvetica, sans-serif; font-size: 10.5pt; line-height: 1.42; color: #1d2433; margin: 0; }
+  h1 { font-size: 21pt; margin: 0 0 4px; line-height: 1.15; }
+  h2 { font-size: 14pt; margin: 22px 0 8px; padding-bottom: 4px; border-bottom: 2px solid #2b5fab; color: #14325e; break-after: avoid; }
+  h3 { font-size: 11pt; margin: 14px 0 4px; color: #14325e; break-after: avoid; }
+  p { margin: 6px 0; }
+  .sub { color: #52607a; font-size: 10.5pt; margin: 0 0 12px; }
+  .meta { color: #52607a; font-size: 9.5pt; }
+  table { width: 100%; border-collapse: collapse; margin: 8px 0 12px; font-size: 9.6pt; break-inside: auto; }
+  th, td { border: 1px solid #c9d1e0; padding: 5px 7px; vertical-align: top; text-align: left; }
+  th { background: #eaf0fa; color: #14325e; }
+  tr { break-inside: avoid; }
+  .ok { color: #17693a; font-weight: bold; white-space: nowrap; }
+  .pend { color: #9a5b00; font-weight: bold; white-space: nowrap; }
+  code, .cmd { font-family: Consolas, "Courier New", monospace; font-size: 9.2pt; }
+  code { background: #f1f3f8; padding: 0 3px; border-radius: 3px; }
+  pre.cmd { background: #f1f3f8; border: 1px solid #d8deea; border-radius: 4px; padding: 6px 9px; margin: 6px 0; white-space: pre-wrap; }
+  .box { border: 1px solid #c9d1e0; background: #f7f9fd; border-radius: 5px; padding: 8px 12px; margin: 10px 0; }
+  .warn { border-color: #e2c27a; background: #fff8e6; }
+  .fig { break-inside: avoid; margin: 6px 0; text-align: center; }
+  .duo { break-inside: avoid; }
+  .fig img { max-width: 100%; border: 1px solid #c9d1e0; }
+  .fig.small img { max-width: 78%; }
+  .fig figcaption { font-size: 9pt; color: #52607a; margin-top: 3px; }
+  .duo { display: flex; gap: 10px; align-items: flex-start; }
+  .duo .fig { flex: 1; margin: 6px 0; }
+  .duo .fig img { max-width: 100%; }
+  ol.passos { padding-left: 20px; margin: 6px 0; }
+  ol.passos > li { margin: 0 0 9px; break-inside: avoid; }
+  .esp { page-break-before: always; }
+  ul { margin: 4px 0; padding-left: 20px; }
+  li { margin: 2px 0; }
+  .esperado { display: block; margin-top: 3px; padding: 3px 8px; background: #edf7f0; border-left: 3px solid #2f8f55; font-size: 9.6pt; }
+</style>
+</head>
+<body>
+
+<h1>Consulta de servidores municipais</h1>
+<p class="sub">Protótipo cliente-servidor com comunicação protegida por TLS, feito para a Secretaria de Atos de Pessoal do TCM-GO (Projeto Integrador III-A, PUC Goiás).</p>
+<p class="meta">Resumo técnico para acompanhamento do projeto, em 18/11/2026. Não é o relatório oficial do PI (RP-03), que tem formato e seções próprios. Dados do sistema: 100% fictícios.</p>
+
+<div class="box">
+  <strong>Em uma frase:</strong> um servidor Python guarda uma base fictícia de 50 servidores de 10 municípios de Goiás e responde, por um canal TLS, às buscas de uma janela Tkinter, que mostra a lista de resultados e a ficha completa de cada servidor. O cliente só confia em servidores com certificado emitido pela CA local do projeto.
+</div>
+
+<h2>1. O que a proposta pede e o que o sistema entrega</h2>
+
+<table>
+  <tr><th style="width:21%">Pedido da proposta</th><th>Como o projeto atende</th><th style="width:14%">Situação</th></tr>
+  <tr><td>Instituição real e necessidade identificada</td><td>TCM-GO. A análise de aposentadorias exige consultar a situação funcional de servidores de vários municípios, hoje em fontes separadas. Representante: Juliana, chefe direta do estudante.</td><td class="ok">Definido</td></tr>
+  <tr><td>Servidor que armazena, recebe solicitações, processa e devolve</td><td><code>consulta/servidor.py</code> carrega <code>data/servidores.json</code>, atende cada conexão em uma thread e executa três operações: <code>municipios</code>, <code>buscar</code> e <code>ficha</code>.</td><td class="ok">Pronto</td></tr>
+  <tr><td>Cliente que consulta por rede e apresenta de forma organizada</td><td>Janela Tkinter (<code>consulta/interface.py</code>): campo de nome, filtro de município, lista de resultados e painel com a ficha. Cada ação vira uma requisição pela rede.</td><td class="ok">Pronto</td></tr>
+  <tr><td>Sem banco, execução local, sem hospedagem</td><td>Base em arquivo JSON, tudo em <code>127.0.0.1</code>, só biblioteca padrão do Python (um teste confere os imports).</td><td class="ok">Pronto</td></tr>
+  <tr><td>Proteger a comunicação com recurso de segurança existente</td><td>TLS (módulo <code>ssl</code> do Python) com CA local criada pelo <code>openssl</code>. O cliente exige certificado assinado pela CA do projeto e recusa qualquer outro.</td><td class="ok">Pronto</td></tr>
+  <tr><td>Evitar exposição de informação sensível</td><td>Base fictícia (aviso na janela e no README). A data de nascimento nunca sai do servidor, só a idade. Chaves privadas fora do Git. O log do servidor não registra o conteúdo das fichas.</td><td class="ok">Pronto</td></tr>
+  <tr><td>Demonstrar à instituição e registrar sugestões</td><td>Demonstração à Juliana antes de 26/11, com os campos da ficha conferidos por ela.</td><td class="pend">Pendente</td></tr>
+  <tr><td>Código-fonte com instruções de execução</td><td>Repositório no GitHub (PR #2 mergeado na <code>main</code>) e <code>README.md</code> com o passo a passo.</td><td class="ok">Pronto</td></tr>
+  <tr><td>Relatório técnico PDF (até 5 págs)</td><td>A escrever, com as capturas de tela deste documento como evidência.</td><td class="pend">Pendente (07/12)</td></tr>
+  <tr><td>Vídeo de até 10 min</td><td>A gravar: servidor e cliente rodando, uma busca, a ficha, a recusa do servidor falso.</td><td class="pend">Pendente (07/12)</td></tr>
+  <tr><td>Carta de Início e Termos assinados</td><td>Carta assinada pelo estudante e pelo professor. Termos aguardam o preenchimento e a assinatura da Juliana (prazo 23/11, 23h59).</td><td class="pend">Parcial</td></tr>
+</table>
+
+<h2>2. Como o sistema funciona</h2>
+
+<svg viewBox="0 0 700 210" width="100%" role="img" aria-label="Diagrama: cliente Tkinter conecta por TLS ao servidor, que lê a base JSON">
+  <defs><marker id="s" markerWidth="9" markerHeight="9" refX="8" refY="4.5" orient="auto"><path d="M0,0 L9,4.5 L0,9 z" fill="#2b5fab"/></marker></defs>
+  <rect x="8" y="40" width="200" height="110" rx="8" fill="#eaf0fa" stroke="#2b5fab"/>
+  <text x="108" y="64" text-anchor="middle" font-family="Arial" font-size="14" font-weight="bold" fill="#14325e">Cliente (janela)</text>
+  <text x="108" y="86" text-anchor="middle" font-family="Arial" font-size="11.5" fill="#1d2433">interface.py (Tkinter)</text>
+  <text x="108" y="104" text-anchor="middle" font-family="Arial" font-size="11.5" fill="#1d2433">cliente.py (ClienteRede)</text>
+  <text x="108" y="128" text-anchor="middle" font-family="Arial" font-size="10.5" fill="#52607a">confia só na ca.crt</text>
+  <rect x="270" y="40" width="200" height="110" rx="8" fill="#eaf0fa" stroke="#2b5fab"/>
+  <text x="370" y="64" text-anchor="middle" font-family="Arial" font-size="14" font-weight="bold" fill="#14325e">Servidor</text>
+  <text x="370" y="86" text-anchor="middle" font-family="Arial" font-size="11.5" fill="#1d2433">servidor.py (1 thread por conexão)</text>
+  <text x="370" y="104" text-anchor="middle" font-family="Arial" font-size="11.5" fill="#1d2433">dominio.py (busca e cálculos)</text>
+  <text x="370" y="128" text-anchor="middle" font-family="Arial" font-size="10.5" fill="#52607a">apresenta servidor.crt</text>
+  <rect x="532" y="55" width="160" height="80" rx="8" fill="#f7f9fd" stroke="#8a97b3"/>
+  <text x="612" y="88" text-anchor="middle" font-family="Arial" font-size="13" font-weight="bold" fill="#14325e">servidores.json</text>
+  <text x="612" y="108" text-anchor="middle" font-family="Arial" font-size="11" fill="#52607a">50 servidores fictícios</text>
+  <line x1="210" y1="82" x2="268" y2="82" stroke="#2b5fab" stroke-width="2" marker-end="url(#s)"/>
+  <line x1="268" y1="112" x2="212" y2="112" stroke="#2b5fab" stroke-width="2" marker-end="url(#s)"/>
+  <text x="239" y="72" text-anchor="middle" font-family="Arial" font-size="10" fill="#14325e">1 linha JSON</text>
+  <text x="239" y="132" text-anchor="middle" font-family="Arial" font-size="10" fill="#14325e">1 linha JSON</text>
+  <line x1="472" y1="95" x2="530" y2="95" stroke="#8a97b3" stroke-width="2" marker-end="url(#s)"/>
+  <rect x="215" y="12" width="60" height="22" rx="11" fill="#2f8f55"/>
+  <text x="245" y="27" text-anchor="middle" font-family="Arial" font-size="11" font-weight="bold" fill="#fff">TLS</text>
+  <rect x="150" y="170" width="400" height="28" rx="6" fill="#fff8e6" stroke="#e2c27a"/>
+  <text x="350" y="189" text-anchor="middle" font-family="Arial" font-size="11.5" fill="#1d2433">CA local (ca.crt) assina o servidor.crt; gerada por scripts/gerar_certificados.py</text>
+</svg>
+
+<ul>
+  <li><strong>Protocolo:</strong> uma conexão TLS por requisição. O cliente envia uma linha JSON (UTF-8), o servidor responde uma linha JSON e a conexão fecha. Limite de 64 KiB por linha e 5 s de timeout.</li>
+  <li><strong>Operações:</strong> <code>municipios</code> (lista para o filtro), <code>buscar</code> (nome e município) e <code>ficha</code> (por id).</li>
+  <li><strong>Erros tratados:</strong> <code>REQUISICAO_INVALIDA</code>, <code>OPERACAO_DESCONHECIDA</code>, <code>NAO_ENCONTRADO</code> e <code>ERRO_INTERNO</code>. Um erro afeta só a conexão que o causou.</li>
+  <li><strong>Cálculos no servidor:</strong> idade e tempo de contribuição, em anos completos, até a data da solicitação. O cliente só apresenta.</li>
+  <li><strong>Janela que não trava:</strong> a rede roda em thread de trabalho, e o resultado volta por uma fila. Se o servidor cair, a janela mostra o aviso e continua aberta.</li>
+</ul>
+
+<h2>3. Tomada de decisão</h2>
+
+<table>
+  <tr><th style="width:19%">Tema</th><th style="width:25%">Decisão</th><th>Por quê (e o que ficou de fora)</th></tr>
+  <tr><td>Instituição e necessidade</td><td>TCM-GO, consulta de servidores para análise de aposentadoria</td><td>O estudante trabalha na Secretaria de Atos de Pessoal, então a necessidade é real e a Juliana pode validar.</td></tr>
+  <tr><td>Dados</td><td>Base <strong>fictícia</strong>, 10 municípios e 50 servidores, gerada por script com semente fixa</td><td>Evita expor dados reais (LGPD) e mantém o escopo pequeno. Gerar por script deixa a base reproduzível e versionável.</td></tr>
+  <tr><td>Linguagem</td><td>Python, só biblioteca padrão</td><td><code>socket</code>, <code>ssl</code>, <code>threading</code> e <code>tkinter</code> já vêm com a linguagem. Sem <code>pip install</code>, o professor roda direto.</td></tr>
+  <tr><td>Protocolo</td><td>JSON por linha sobre socket TLS</td><td>A proposta fala em "comunicação em rede". Fácil de mostrar no vídeo e sem framework. HTTP/REST traria mais peças sem ganho.</td></tr>
+  <tr><td>Uma conexão por requisição</td><td>Conectar, pedir, receber, fechar</td><td>Sem autenticação não há sessão. Cada consulta é independente e uma queda aparece só na ação que falhou.</td></tr>
+  <tr><td>Concorrência</td><td>Uma thread por conexão</td><td>Atende vários clientes com pouco código. A base é só leitura, então não precisa de trava. O handshake roda na thread, e um cliente lento não bloqueia os outros.</td></tr>
+  <tr><td>Segurança</td><td>TLS com <strong>CA local</strong> (RSA 3072), cliente confia só nela</td><td>O material das disciplinas trata de TLS, certificados e Autoridade Certificadora. Um certificado autoassinado seria mais simples, mas não mostraria a cadeia de confiança. A biblioteca externa <code>cryptography</code> foi descartada por quebrar a regra de não instalar nada.</td></tr>
+  <tr><td>Certificados estritos</td><td>CA com <code>basicConstraints</code> e <code>keyUsage</code> críticos; servidor com SAN e <code>serverAuth</code></td><td>O Python 3.13+ liga <code>VERIFY_X509_STRICT</code>. Em vez de desligar a verificação, os certificados foram emitidos de forma compatível.</td></tr>
+  <tr><td>Interface</td><td>Janela Tkinter, no lugar de linha de comando</td><td>A proposta aceita CLI, mas a janela é mais apresentável no vídeo. Fonte de 12 pt ou mais para gravação de tela.</td></tr>
+  <tr><td>Busca</td><td>Por trecho do nome, sem acento e sem diferenciar maiúsculas; filtro por município; nome vazio lista todos</td><td>O analista nem sempre lembra a grafia exata. Normalização em NFKD, igual para busca e comparação.</td></tr>
+  <tr><td>Cálculos</td><td>Idade e tempo de contribuição em anos completos, até a data da solicitação</td><td>Mesma referência de data para os dois valores. Simplificação aceita pelo estudante.</td></tr>
+  <tr><td>Escopo recusado</td><td>Sem login, sem indicar elegibilidade à aposentadoria, sem edição de dados</td><td>A proposta manda evitar complexidade excessiva. O sistema só apresenta dados. Login ficou como melhoria futura.</td></tr>
+  <tr><td>Método de trabalho</td><td>Spec-Driven: PRD, TechSpec, 12 tasks, check-spec e execução task a task</td><td>Cada requisito (14 RF, 6 RNF, 6 RP) tem rastreio até um componente e um teste. Nada foi feito sem requisito.</td></tr>
+</table>
+
+<h2>4. Ferramentas usadas</h2>
+
+<table>
+  <tr><th style="width:24%">Ferramenta</th><th>Uso no projeto</th></tr>
+  <tr><td>Python 3.15 (código para 3.10+)</td><td>Servidor, cliente, scripts e testes. Módulos: <code>socket</code>, <code>ssl</code>, <code>threading</code>, <code>json</code>, <code>queue</code>, <code>unicodedata</code>, <code>datetime</code>, <code>argparse</code>.</td></tr>
+  <tr><td>Tkinter / ttk</td><td>Janela do cliente: <code>Entry</code>, <code>Combobox</code>, <code>Treeview</code> e painel de ficha.</td></tr>
+  <tr><td>OpenSSL 3.5</td><td>Gera a CA local e o certificado do servidor (<code>scripts/gerar_certificados.py</code>). No Windows vem com o Git for Windows.</td></tr>
+  <tr><td><code>unittest</code> e <code>ast</code></td><td>117 testes automatizados. O <code>ast</code> confere que nenhum import sai da biblioteca padrão.</td></tr>
+  <tr><td>Git e GitHub</td><td>Commits no padrão Conventional Commits, uma branch de trabalho e Pull Request revisado e mergeado pelo estudante.</td></tr>
+  <tr><td>Claude Code</td><td>Assistente de desenvolvimento, usado no fluxo Spec-Driven (levantamento do PRD, TechSpec, tasks em Gherkin, implementação e testes). Decisões e aprovações ficaram com o estudante.</td></tr>
+  <tr><td>Context7</td><td>Consulta à documentação do módulo <code>ssl</code> do CPython (3.13), para configurar a verificação estrita do certificado.</td></tr>
+</table>
+
+<h2>5. O que o sistema mostra (capturas da janela real)</h2>
+<p>Capturas feitas em 18/11/2026 com o servidor e a janela reais, comunicando por TLS 1.3 em <code>127.0.0.1</code>. A faixa amarela avisa que os dados são fictícios.</p>
+
+<div class="duo">
+  <figure class="fig"><img src="img/01-inicial.png" alt="Janela inicial"><figcaption>1. Tela inicial: faixa de aviso, nome, filtro de município e botão Buscar.</figcaption></figure>
+  <figure class="fig"><img src="img/02-lista-joana.png" alt="Lista de resultados da busca joana"><figcaption>2. Busca por "joana": 2 resultados, de municípios diferentes.</figcaption></figure>
+</div>
+<div class="duo">
+  <figure class="fig"><img src="img/03-ficha.png" alt="Ficha do servidor"><figcaption>3. Ficha do servidor: datas em DD/MM/AAAA, valor em R$, idade e tempo de contribuição calculados no servidor.</figcaption></figure>
+  <figure class="fig"><img src="img/04-fatima.png" alt="Busca fatima sem acento encontra Fátima"><figcaption>4. "fatima" (sem acento) encontra "Fátima". A ficha mostra "Sim: Acidente de trabalho com fratura no punho".</figcaption></figure>
+</div>
+<div class="duo">
+  <figure class="fig"><img src="img/06-filtro-formosa.png" alt="Filtro por município Formosa"><figcaption>5. Filtro por município (Formosa) com nome vazio: lista os 5 servidores do município.</figcaption></figure>
+  <figure class="fig"><img src="img/05-sem-resultado.png" alt="Nenhum servidor encontrado"><figcaption>6. Busca sem resultado: mensagem clara, sem erro.</figcaption></figure>
+</div>
+<div class="duo">
+  <figure class="fig"><img src="img/07-ca-falsa.png" alt="Servidor não confiável"><figcaption>7. Servidor com certificado de outra CA: o cliente recusa e avisa.</figcaption></figure>
+  <div class="box" style="flex:1;margin-top:6px">
+    <strong>Por que a captura 7 importa.</strong> O servidor falso estava no ar e respondia por TLS, mas seu certificado foi assinado por uma CA diferente da <code>ca.crt</code> do projeto. O aperto de mão falhou antes de qualquer consulta, então nenhum dado foi trocado. O log do servidor falso registra <code>falha_de_conexao (SSLError)</code>. É a prova do requisito de proteger a comunicação (RF-14).
+  </div>
+</div>
+
+<h2>6. Como foi testado e validado</h2>
+
+<h3>Resultado dos checks em 18/11/2026</h3>
+<pre class="cmd">python -m unittest discover -s tests          -> Ran 117 tests, OK (skipped=1)
+python -m compileall -q consulta scripts tests -> sem erros
+git check-ignore certs/servidor.key certs/ca.key -> ambos ignorados (chaves fora do Git)</pre>
+<p>O teste pulado é o que só se aplica a sistemas POSIX. Nenhum warning novo.</p>
+
+<table>
+  <tr><th style="width:30%">Arquivo de teste</th><th style="width:9%">Testes</th><th>O que prova</th></tr>
+  <tr><td>test_integracao_tls.py</td><td>30</td><td>Servidor e cliente reais com TLS: as três operações, os quatro códigos de erro, duas consultas simultâneas, certificado de outra CA recusado, servidor parado, busca abaixo de 1 s.</td></tr>
+  <tr><td>test_interface.py</td><td>26</td><td>Janela com cliente falso: lista, ficha, "nenhum resultado", erro de rede, faixa "dados fictícios", fonte de 12 pt ou mais.</td></tr>
+  <tr><td>test_protocolo.py</td><td>14</td><td>Linha válida, JSON inválido, mensagem grande demais.</td></tr>
+  <tr><td>test_busca.py</td><td>12</td><td>Acentos, maiúsculas, trecho do nome, filtro por município.</td></tr>
+  <tr><td>test_certificados.py</td><td>11</td><td>Geração da CA e do certificado, <code>openssl verify</code>, chaves fora do Git.</td></tr>
+  <tr><td>test_dominio.py</td><td>8</td><td>Anos completos: aniversário no dia, na véspera e em 29/02; campos da ficha.</td></tr>
+  <tr><td>test_sem_dependencias_externas.py</td><td>7</td><td>Todo import vem da biblioteca padrão.</td></tr>
+  <tr><td>test_base.py e test_gerar_base.py</td><td>5 + 4</td><td>Base válida, 10 municípios e 50 servidores, geração idêntica byte a byte.</td></tr>
+</table>
+
+<h3>Rastreio: requisito da spec, prova</h3>
+<table>
+  <tr><th style="width:17%">Requisito</th><th>Prova</th></tr>
+  <tr><td>RF-01 base fictícia</td><td>Gerador roda duas vezes e dá o mesmo arquivo; base com 10 municípios e 50 servidores.</td></tr>
+  <tr><td>RF-02 a RF-09 ficha e busca</td><td>Testes de domínio, de busca e de integração; captura da ficha (seção 5).</td></tr>
+  <tr><td>RF-10, RF-11 cliente-servidor e simultaneidade</td><td>Integração com duas consultas ao mesmo tempo, uma delas lenta.</td></tr>
+  <tr><td>RF-12, RF-13 falhas</td><td>Servidor parado vira mensagem; solicitação inválida recebe erro e o servidor segue atendendo.</td></tr>
+  <tr><td>RF-14 TLS e CA local</td><td>Handshake com a CA do projeto funciona; com outra CA o cliente recusa (captura 07).</td></tr>
+  <tr><td>RNF-01 a RNF-06</td><td>Faixa fictícia, chaves ignoradas pelo Git, busca abaixo de 1 s, imports da biblioteca padrão, fonte de 12 pt, certificados regeneráveis por script.</td></tr>
+</table>
+
+<div class="box warn">
+  <strong>Limites conhecidos, sem esconder nada:</strong>
+  <ul>
+    <li>A demonstração à Juliana ainda não aconteceu. Os campos da ficha só estão confirmados pelo estudante.</li>
+    <li>Tudo foi testado em uma máquina (Windows 11, Python 3.15). A documentação consultada cobre o Python 3.13, e o comportamento na 3.15 foi confirmado pelos testes.</li>
+    <li>O cliente em outro computador está fora do escopo. A demonstração é local.</li>
+    <li>Não há login nem perfis. Qualquer cliente com a <code>ca.crt</code> consulta o servidor.</li>
+  </ul>
+</div>
+
+<h2 class="esp">7. Passo a passo para testar como usuário</h2>
+
+<p><strong>Antes de começar:</strong> abra a pasta do projeto no terminal (PowerShell ou Git Bash) e use dois terminais, um para o servidor e outro para o cliente. Se <code>python</code> não funcionar, use <code>python3</code> ou <code>py</code>.</p>
+
+<ol class="passos">
+  <li><strong>Gerar os certificados</strong> (só se a pasta <code>certs/</code> não existir)
+    <pre class="cmd">python scripts/gerar_certificados.py</pre>
+    <span class="esperado">Esperado: mensagem "Certificados gravados em certs" e quatro arquivos: ca.crt, ca.key, servidor.crt, servidor.key.</span></li>
+
+  <li><strong>Terminal 1: subir o servidor</strong> e deixar aberto
+    <pre class="cmd">python -m consulta.servidor</pre>
+    <span class="esperado">Esperado: "Servidor no ar em 127.0.0.1:8443 (Ctrl+C para encerrar)". Se a porta estiver ocupada, use <code>--porta 9443</code> aqui e no cliente.</span></li>
+
+  <li><strong>Terminal 2: abrir o cliente</strong>
+    <pre class="cmd">python -m consulta.interface</pre>
+    <span class="esperado">Esperado: janela "Consulta de servidores municipais" com a faixa amarela "Dados fictícios, para demonstração". A lista de municípios carrega sozinha no filtro.</span></li>
+
+  <li><strong>Busca simples.</strong> Digite <code>joana</code> e clique em Buscar.
+    <span class="esperado">Esperado: 2 resultados: Joana Gonçalves Gonçalves (Anápolis) e Joana Gonçalves Rodrigues (Águas Lindas de Goiás). Rodapé: "2 servidor(es) encontrado(s)".</span></li>
+
+  <li><strong>Abrir a ficha.</strong> Clique em "Joana Gonçalves Gonçalves".
+    <span class="esperado">Esperado: Feminino, 62 anos, Secretaria Municipal de Obras, PCD Não, doença profissional Não, ingresso 07/04/2007, solicitação 10/10/2026, remuneração R$ 11.380,00, tempo de contribuição 19 anos. Não aparece data de nascimento nem se o servidor "pode se aposentar".</span></li>
+
+  <li><strong>Acentos e maiúsculas.</strong> Busque <code>fatima</code>, depois <code>FÁTIMA</code> e depois <code>fatim</code>.
+    <span class="esperado">Esperado: as três buscas dão os mesmos 3 resultados (Fátima Alves Alves, Fátima Alves Santos, Fátima Araújo Ferreira). A ficha de Fátima Alves Alves mostra "Sim: Acidente de trabalho com fratura no punho".</span></li>
+
+  <li><strong>Filtro por município.</strong> Apague o nome, escolha <code>Formosa</code> no filtro e clique em Buscar.
+    <span class="esperado">Esperado: os 5 servidores de Formosa (nome vazio lista todos). Agora digite <code>marcia</code> com Formosa escolhido: devem sobrar 2 (as duas Márcias). Volte o filtro para "Todos os municípios".</span></li>
+
+  <li><strong>Busca sem resultado.</strong> Digite <code>zzzz</code> e busque.
+    <span class="esperado">Esperado: mensagem "Nenhum servidor encontrado", sem erro e sem fechar a janela.</span></li>
+
+  <li><strong>Vários clientes ao mesmo tempo.</strong> Abra um terceiro terminal, rode <code>python -m consulta.interface</code> de novo e faça buscas diferentes nas duas janelas.
+    <span class="esperado">Esperado: as duas janelas respondem, sem uma esperar a outra.</span></li>
+
+  <li><strong>Olhar o log do servidor</strong> (Terminal 1).
+    <span class="esperado">Esperado: uma linha por consulta, com hora, endereço do cliente, <code>TLSv1.3</code>, a cifra, a operação e <code>resultado=ok</code>. O conteúdo das fichas não aparece.</span></li>
+
+  <li><strong>Servidor fora do ar.</strong> No Terminal 1, aperte Ctrl+C e, na janela, busque qualquer nome.
+    <span class="esperado">Esperado: "Não foi possível conectar ao servidor. Verifique se ele está em execução." A janela continua aberta. Suba o servidor de novo (passo 2) e busque: volta a funcionar sem reabrir a janela.</span></li>
+
+  <li><strong>Servidor falso (a prova da segurança).</strong> Com o servidor verdadeiro parado:
+    <pre class="cmd">python scripts/gerar_certificados.py certs/falso
+python -m consulta.servidor --certs certs/falso</pre>
+    Na janela do cliente, busque <code>joana</code>.
+    <span class="esperado">Esperado: "Servidor não confiável: o certificado não foi emitido pela CA do projeto." A lista fica vazia, e nenhum dado foi trocado. Pare o servidor falso (Ctrl+C) e rode o passo 2 para voltar ao normal.</span></li>
+
+  <li><strong>Conferir os testes e os segredos</strong> (qualquer terminal)
+    <pre class="cmd">python -m unittest discover -s tests
+git check-ignore certs/servidor.key certs/ca.key</pre>
+    <span class="esperado">Esperado: "OK" com 117 testes (1 pulado) e as duas chaves listadas como ignoradas.</span></li>
+</ol>
+
+<h2>8. O que falta e próximos passos</h2>
+<table>
+  <tr><th style="width:18%">Prazo</th><th>O que fazer</th></tr>
+  <tr><td>23/11, 23h59</td><td>Termos com a Juliana: ela preenche, o estudante assina de novo por gov.br, ela assina, e tudo é anexado na Plataforma A. A Carta já está assinada.</td></tr>
+  <tr><td>Antes de 26/11</td><td>Demonstrar à Juliana usando o passo a passo acima (passos 2 a 8 e 12). Conferir os campos da ficha com ela e registrar por escrito as considerações.</td></tr>
+  <tr><td>07/12, 23h59</td><td>Relatório PDF (até 5 páginas, Arial 12, margens 2,5 e 3 cm, com as capturas da seção 5); vídeo de até 10 minutos; envio nos dois campos da Plataforma A.</td></tr>
+</table>
+
+<p class="meta">Repositório: github.com/FhilipeRodrigues/projeto-integrador-iii-a. Especificação completa em <code>docs/specs/2026-11-16-consulta-servidores-tcmgo/</code> (PRD, TechSpec, 12 tasks e check-spec).</p>
+
+</body>
+</html>
