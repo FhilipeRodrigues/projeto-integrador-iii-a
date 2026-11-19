@@ -1,6 +1,6 @@
 # Plano: nomes variados, aba Solicitações e aprovar/desaprovar (18/11/2026)
 
-**Status:** spec revisada, aguardando aprovação do estudante. Nenhum código alterado.
+**Status:** spec aprovada pelo estudante em 18/11/2026. Task 13 feita em 19/11/2026; tasks 14 a 16 pendentes.
 
 ## Objetivo
 Três melhorias pedidas pelo estudante para o vídeo do PI III-A:
