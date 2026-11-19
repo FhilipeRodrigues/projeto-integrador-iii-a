@@ -16,6 +16,8 @@ from tests.test_integracao_tls import _openssl, servidor_no_ar, servidor_no_ar_e
 
 RAIZ = Path(__file__).resolve().parent.parent
 SERVIDORES = base.carregar(RAIZ / "data" / "servidores.json")["servidores"]
+# Dois servidores achados pela busca "pereira", sem fixar ids que dependem do sorteio da base.
+ID_A, ID_B = [s["id"] for s in dominio.buscar(SERVIDORES, "pereira")][:2]
 
 
 class ClienteFalso:
@@ -82,29 +84,29 @@ class InterfaceBuscaTest(JanelaBase):
         self.assertEqual(municipios, sorted(municipios, key=dominio.normalizar))
 
     def test_Buscar_por_trecho_do_nome(self):
-        self.buscar("conceicao")
+        self.buscar("pereira")
         linhas = self.linhas()
         self.assertTrue(linhas)
         for nome, municipio in linhas:
-            self.assertIn("conceicao", dominio.normalizar(nome))
+            self.assertIn("pereira", dominio.normalizar(nome))
             self.assertTrue(municipio)
 
     def test_Buscar_com_a_tecla_Enter(self):
-        self.janela._nome.set("joao")
+        self.janela._nome.set("pereira")
         entrada = next(w for w in _percorrer(self.raiz) if isinstance(w, ttk.Entry))
         self.raiz.deiconify()  # o foco só chega ao campo com a janela visível
         entrada.focus_force()
         self.raiz.update()
         entrada.event_generate("<Return>")
         self.esperar()
-        esperado = {s["nome"] for s in dominio.buscar(SERVIDORES, "joao")}
+        esperado = {s["nome"] for s in dominio.buscar(SERVIDORES, "pereira")}
         self.assertTrue(esperado)
         self.assertEqual({nome for nome, _ in self.linhas()}, esperado)
 
     def test_Buscar_dentro_de_um_municipio(self):
-        self.buscar("joana")
+        self.buscar("lima")
         self.assertGreater(len({municipio for _, municipio in self.linhas()}), 1)
-        self.buscar("joana", "Anápolis")
+        self.buscar("lima", "Anápolis")
         linhas = self.linhas()
         self.assertTrue(linhas)
         self.assertEqual({municipio for _, municipio in linhas}, {"Anápolis"})
@@ -140,7 +142,7 @@ class InterfaceBuscaTest(JanelaBase):
                 raise cliente.ErroDeRede("sem rede")
 
         self.janela._cliente = Quebrado()
-        self.buscar("joao")
+        self.buscar("pereira")
         self.assertEqual(self.janela._situacao.get(), "sem rede")
 
 
@@ -172,9 +174,9 @@ class InterfaceFichaTest(JanelaBase):
         return self.ficha()
 
     def test_Selecionar_um_servidor_mostra_a_ficha(self):
-        self.buscar("joao")
-        self.selecionar(6)
-        servidor = next(s for s in SERVIDORES if s["id"] == 6)
+        self.buscar("pereira")
+        self.selecionar(ID_A)
+        servidor = next(s for s in SERVIDORES if s["id"] == ID_A)
         rotulos = [str(w.cget("text")) for w in _percorrer(self.janela._campos_ficha)
                    if isinstance(w, ttk.Label)]
         for _, rotulo in interface.CAMPOS_DA_FICHA:
@@ -208,36 +210,36 @@ class InterfaceFichaTest(JanelaBase):
         )
 
     def test_Selecionar_outro_servidor_atualiza_a_ficha(self):
-        self.buscar("joao")
-        self.selecionar(6)
+        self.buscar("pereira")
+        self.selecionar(ID_A)
         primeira = self.ficha()
-        self.selecionar(19)
+        self.selecionar(ID_B)
         self.assertNotEqual(self.ficha()["nome"], primeira["nome"])
-        self.assertEqual(self.ficha()["nome"], next(s["nome"] for s in SERVIDORES if s["id"] == 19))
+        self.assertEqual(self.ficha()["nome"], next(s["nome"] for s in SERVIDORES if s["id"] == ID_B))
 
     def test_Uma_nova_busca_limpa_a_ficha(self):
-        self.buscar("joao")
-        self.selecionar(6)
+        self.buscar("pereira")
+        self.selecionar(ID_A)
         self.assertTrue(self.ficha_visivel())
-        self.buscar("joana")
+        self.buscar("lima")
         self.assertFalse(self.ficha_visivel())
         self.assertFalse(any(self.ficha().values()))
         self.selecionar(self.janela._lista.get_children()[0])
         self.assertTrue(self.ficha_visivel())
 
     def test_Ficha_que_chega_depois_de_nova_busca_e_descartada(self):
-        self.buscar("joao")
-        self.janela._lista.selection_set("6")
+        self.buscar("pereira")
+        self.janela._lista.selection_set(str(ID_A))
         self.raiz.update()  # dispara o pedido da ficha, sem esperar a resposta
-        self.janela._nome.set("joana")
+        self.janela._nome.set("lima")
         self.janela.buscar()
         self.esperar()
         self.assertFalse(self.ficha_visivel())
 
     def test_A_ficha_nao_indica_elegibilidade_nem_mostra_a_data_de_nascimento(self):
-        self.buscar("joao")
-        self.selecionar(6)
-        servidor = next(s for s in SERVIDORES if s["id"] == 6)
+        self.buscar("pereira")
+        self.selecionar(ID_A)
+        servidor = next(s for s in SERVIDORES if s["id"] == ID_A)
         textos = [str(w.cget("text")) for w in _percorrer(self.raiz) if "text" in w.keys()]
         textos += [v for v in self.ficha().values()]
         junto = " ".join(textos).casefold()
@@ -273,7 +275,7 @@ class InterfaceServidorParadoTest(JanelaBase):
 
     def test_O_servidor_volta_a_funcionar_sem_reiniciar_a_janela(self):
         self.janela._cliente = ClienteFalso()
-        self.buscar("joao")
+        self.buscar("pereira")
         self.assertTrue(self.linhas())
         self.assertGreater(len(self.janela._seletor.cget("values")), 1)
 
@@ -288,7 +290,7 @@ class InterfaceConsultaLentaTest(JanelaBase):
                 return super().buscar(nome, municipio)
 
         self.janela._cliente = Lento()
-        self.janela._nome.set("joao")
+        self.janela._nome.set("pereira")
         self.janela.buscar()
         self.assertTrue(self.janela._botao_buscar.instate(["disabled"]))
         self.janela.buscar()  # Enter no campo durante a consulta é ignorado
@@ -371,7 +373,7 @@ class InterfaceErrosDeRedeTest(unittest.TestCase):
         self.assertEqual(janela._situacao.get(), MSG_PARADO)
         self.assertEqual(len(janela._seletor.cget("values")), 1)
         with servidor_no_ar_em(SERVIDORES, self.certs, porta):
-            self.buscar(janela, "joao")
+            self.buscar(janela, "pereira")
         self.assertTrue(janela._lista.get_children())
         self.assertGreater(len(janela._seletor.cget("values")), 1)
 
@@ -414,10 +416,10 @@ class InterfaceIntegracaoTest(unittest.TestCase):
     @unittest.skipUnless(_openssl(), "openssl não encontrado; veja a mensagem do script")
     def test_A_lista_corresponde_ao_que_o_servidor_tem(self):
         with self.janela_no_ar() as (janela, rede, esperar):
-            janela._nome.set("joao")
+            janela._nome.set("pereira")
             janela.buscar()
             esperar()
-            do_servidor = [(s["nome"], s["municipio"]) for s in rede.buscar("joao")]
+            do_servidor = [(s["nome"], s["municipio"]) for s in rede.buscar("pereira")]
             na_janela = [
                 tuple(janela._lista.item(i, "values")) for i in janela._lista.get_children()
             ]
@@ -428,7 +430,7 @@ class InterfaceIntegracaoTest(unittest.TestCase):
     def test_A_ficha_da_janela_corresponde_ao_servidor(self):
         with self.janela_no_ar() as (janela, rede, esperar):
             raiz_update = janela._raiz.update
-            janela._nome.set("joao")
+            janela._nome.set("pereira")
             janela.buscar()
             esperar()
             identificacao = janela._lista.get_children()[0]

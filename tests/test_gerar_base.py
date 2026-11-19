@@ -49,6 +49,45 @@ class GerarBaseTest(unittest.TestCase):
         self.assertTrue(any(s["pcd"] for s in servidores))
         self.assertTrue(any(s["doenca_profissional"] for s in servidores))
 
+    def _primeiros(self):
+        return [s["nome"].split()[0] for s in self.dados["servidores"]]
+
+    def test_Cada_um_dos_50_nomes_aparece_uma_vez(self):
+        primeiros = self._primeiros()
+        self.assertEqual(sorted(primeiros), sorted(gerar_base.NOMES_M + gerar_base.NOMES_F))
+        self.assertEqual(len(gerar_base.NOMES_M), 25)
+        self.assertEqual(len(gerar_base.NOMES_F), 25)
+
+    def test_O_sexo_acompanha_o_nome(self):
+        for servidor in self.dados["servidores"]:
+            esperado = "M" if servidor["nome"].split()[0] in gerar_base.NOMES_M else "F"
+            self.assertEqual(servidor["sexo"], esperado, servidor["nome"])
+
+    def test_Dois_sobrenomes_diferentes_entre_si(self):
+        for servidor in self.dados["servidores"]:
+            partes = servidor["nome"].split()
+            self.assertEqual(len(partes), 3, servidor["nome"])
+            self.assertNotEqual(partes[1], partes[2], servidor["nome"])
+
+    def test_Nomes_parecidos_em_municipios_diferentes(self):
+        municipio = {s["nome"].split()[0]: s["municipio"] for s in self.dados["servidores"]}
+        for a, b in gerar_base.PARES_PARECIDOS:
+            self.assertNotEqual(municipio[a], municipio[b], f"{a} e {b}")
+
+    def test_Os_nomes_ficam_distribuidos_entre_os_municipios(self):
+        sexos = {}
+        for servidor in self.dados["servidores"]:
+            sexos.setdefault(servidor["municipio"], set()).add(servidor["sexo"])
+        self.assertEqual(len(sexos), 10)
+        for municipio, conjunto in sexos.items():
+            self.assertEqual(conjunto, {"F", "M"}, municipio)
+
+    def test_O_nome_usado_no_README_existe_na_base_e_no_README(self):
+        self.assertTrue(any("maria" in nome.lower() for nome in self._primeiros()))
+        readme = (RAIZ / "README.md").read_text(encoding="utf-8")
+        self.assertIn("`maria`", readme)
+        self.assertNotIn("`joana`", readme)
+
     def test_a_base_versionada_e_a_que_o_gerador_produz(self):
         versionada = RAIZ / "data" / "servidores.json"
         self.assertTrue(versionada.exists(), "rode: python scripts/gerar_base.py")

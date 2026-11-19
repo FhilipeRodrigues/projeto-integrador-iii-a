@@ -1,8 +1,8 @@
 """Gera data/servidores.json: 10 municípios de Goiás e 50 servidores FICTÍCIOS.
 
 A semente é fixa, então a mesma versão do Python produz sempre o mesmo arquivo.
-Os nomes são combinações aleatórias de nomes e sobrenomes comuns e podem coincidir
-por acaso com pessoas reais.
+Os 50 nomes mais comuns do Brasil aparecem uma vez cada, com dois sobrenomes comuns
+sorteados; as combinações podem coincidir por acaso com pessoas reais.
 
 Uso: python scripts/gerar_base.py [destino]
 """
@@ -29,14 +29,22 @@ ORGAOS = [
     "Secretaria Municipal de Obras",
     "Secretaria Municipal de Assistência Social",
 ]
+# Os 25 nomes femininos e os 25 masculinos mais comuns do Brasil (lista do estudante).
+# Cada um aparece uma vez na base.
 NOMES_F = [
-    "Maria", "Ana", "Conceição", "Luíza", "Aparecida", "Joana", "Sebastiana",
-    "Helena", "Márcia", "Rita", "Teresa", "Fátima",
+    "Maria", "Ana", "Helena", "Francisca", "Antônia", "Adriana", "Márcia",
+    "Juliana", "Isabel", "Beatriz", "Catarina", "Vitória", "Sofia", "Laura",
+    "Fernanda", "Patrícia", "Júlia", "Cecília", "Maitê", "Alice", "Aurora",
+    "Antonella", "Ísis", "Heloísa", "Luísa",
 ]
 NOMES_M = [
-    "José", "João", "Antônio", "Francisco", "Carlos", "Paulo", "Geraldo",
-    "Raimundo", "Sebastião", "Luiz", "Marcos", "Valdemar",
+    "José", "João", "Antônio", "Francisco", "Pedro", "Carlos", "Lucas", "Luiz",
+    "Paulo", "Gabriel", "Marcos", "Davi", "Rafael", "Luís", "Daniel", "Miguel",
+    "Gustavo", "Felipe", "Guilherme", "Eduardo", "Arthur", "Heitor", "Matheus",
+    "Henrique", "Samuel",
 ]
+# Pares que diferem só pela terminação: ficam em municípios diferentes.
+PARES_PARECIDOS = [("Antônio", "Antônia"), ("Francisco", "Francisca")]
 SOBRENOMES = [
     "Silva", "Santos", "Oliveira", "Souza", "Pereira", "Alves", "Ferreira",
     "Rodrigues", "Gonçalves", "Barbosa", "Ribeiro", "Carvalho", "Lima", "Araújo",
@@ -52,14 +60,32 @@ def _data_iso(dia: date) -> str:
     return dia.isoformat()
 
 
-def _novo_servidor(rng, numero, municipio, nomes_usados):
-    sexo = rng.choice(["F", "M"])
+def _distribuicao_valida(primeiros):
+    """Cada município (blocos de 5) mistura os sexos, e nomes parecidos não dividem município."""
+    blocos = [primeiros[i:i + SERVIDORES_POR_MUNICIPIO]
+              for i in range(0, len(primeiros), SERVIDORES_POR_MUNICIPIO)]
+    for bloco in blocos:
+        sexos = {sexo for _, sexo in bloco}
+        if sexos != {"F", "M"}:
+            return False
+        nomes = {nome for nome, _ in bloco}
+        if any(a in nomes and b in nomes for a, b in PARES_PARECIDOS):
+            return False
+    return True
+
+
+def _sortear_primeiros_nomes(rng):
+    """Embaralha os 50 nomes até a distribuição pelos municípios ser válida (determinístico)."""
+    primeiros = [(nome, "F") for nome in NOMES_F] + [(nome, "M") for nome in NOMES_M]
     while True:
-        primeiro = rng.choice(NOMES_F if sexo == "F" else NOMES_M)
-        nome = f"{primeiro} {rng.choice(SOBRENOMES)} {rng.choice(SOBRENOMES)}"
-        if nome not in nomes_usados:
-            nomes_usados.add(nome)
-            break
+        rng.shuffle(primeiros)
+        if _distribuicao_valida(primeiros):
+            return primeiros
+
+
+def _novo_servidor(rng, numero, municipio, primeiro, sexo):
+    sobrenome1, sobrenome2 = rng.sample(SOBRENOMES, 2)
+    nome = f"{primeiro} {sobrenome1} {sobrenome2}"
 
     # Dia de nascimento até 28 evita o caso de 29/02 e garante 18 anos no ingresso.
     nascimento = date(rng.randint(1958, 1990), rng.randint(1, 12), rng.randint(1, 28))
@@ -86,11 +112,12 @@ def _novo_servidor(rng, numero, municipio, nomes_usados):
 def gerar_base() -> dict:
     """Monta a base em memória, de forma determinística."""
     rng = random.Random(SEMENTE)
-    nomes_usados = set()
+    primeiros = _sortear_primeiros_nomes(rng)
     servidores = []
     for municipio in MUNICIPIOS:
         for _ in range(SERVIDORES_POR_MUNICIPIO):
-            servidores.append(_novo_servidor(rng, len(servidores) + 1, municipio, nomes_usados))
+            primeiro, sexo = primeiros[len(servidores)]
+            servidores.append(_novo_servidor(rng, len(servidores) + 1, municipio, primeiro, sexo))
     return {"ficticio": True, "servidores": servidores}
 
 

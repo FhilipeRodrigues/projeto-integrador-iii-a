@@ -48,7 +48,7 @@ Ele escuta em `127.0.0.1:8443`. Opções: `--host`, `--porta` e `--certs` (pasta
 python -m consulta.interface
 ```
 
-Opções: `--host`, `--porta` e `--ca` (caminho do `ca.crt`). Na janela, digite `joana` e clique em Buscar. A lista mostra os servidores com esse nome (2 na base fictícia). Escolha um para ver a ficha.
+Opções: `--host`, `--porta` e `--ca` (caminho do `ca.crt`). Na janela, digite `maria` e clique em Buscar. A lista mostra os servidores com esse nome (1 na base fictícia). Escolha um para ver a ficha.
 
 ## Demonstração de segurança: o cliente recusa um servidor falso
 

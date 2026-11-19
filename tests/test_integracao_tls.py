@@ -161,14 +161,14 @@ class CanalSeguroTest(unittest.TestCase):
 
     def test_Buscar_por_trecho_do_nome(self):
         with servidor_no_ar(self.servidores, self.certs) as (srv, _):
-            lista = self._cliente(srv).buscar("conceicao")
+            lista = self._cliente(srv).buscar("pereira")
         self.assertTrue(lista)
         for item in lista:
             self.assertEqual(set(item), {"id", "nome", "municipio"})
-            self.assertIn("conceicao", dominio.normalizar(item["nome"]))
+            self.assertIn("pereira", dominio.normalizar(item["nome"]))
 
     def _com_marias(self):
-        """A base fictícia atual não tem nenhuma "Maria": renomeia três para o cenário."""
+        """Renomeia três servidores para o cenário ter várias "Maria" em Anápolis e Goiânia."""
         base_com_marias = [dict(s) for s in self.servidores]
         for indice, nome in ((0, "Maria Alves Lima"), (1, "Ana Maria Souza"), (5, "Maria Pereira")):
             base_com_marias[indice]["nome"] = nome

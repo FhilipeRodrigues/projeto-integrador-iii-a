@@ -16,7 +16,7 @@ PRD: [prd.md](prd.md) · TechSpec: [techspec.md](techspec.md)
 | 10 | [Interface: ficha do servidor](tasks/10-interface-ficha.md) | RF-02, RF-05, RF-09 | 09 | feita |
 | 11 | [Interface: erros de rede e de certificado](tasks/11-interface-erros-de-rede.md) | RF-12, RF-14 | 09 | feita |
 | 12 | [README e execução em pasta limpa](tasks/12-readme-execucao.md) | RNF-04 | 10, 11 | feita |
-| 13 | [Nomes mais variados na base](tasks/13-nomes-da-base.md) | RF-01 | 01 | pendente |
+| 13 | [Nomes mais variados na base](tasks/13-nomes-da-base.md) | RF-01 | 01 | feita |
 | 14 | [Solicitações no servidor](tasks/14-solicitacoes-no-servidor.md) | RF-15, RF-16, RNF-07 | 06, 13 | pendente |
 | 15 | [Aba Solicitações na janela](tasks/15-aba-solicitacoes.md) | RF-12, RF-16 | 10, 11, 14 | pendente |
 | 16 | [Aprovar ou desaprovar, com situação persistente](tasks/16-aprovar-desaprovar.md) | RF-09, RF-12, RF-17, RF-18, RNF-07 | 14, 15 | pendente |
