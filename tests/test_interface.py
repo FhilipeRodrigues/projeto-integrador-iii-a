@@ -10,7 +10,7 @@ from pathlib import Path
 from tkinter import font as tkfont
 from tkinter import ttk
 
-from consulta import base, cliente, dominio, interface
+from consulta import base, cliente, dominio, interface, solicitacoes
 from scripts import gerar_certificados
 from tests.test_integracao_tls import _openssl, servidor_no_ar, servidor_no_ar_em
 
@@ -23,6 +23,9 @@ ID_A, ID_B = [s["id"] for s in dominio.buscar(SERVIDORES, "pereira")][:2]
 class ClienteFalso:
     """Responde como o servidor, a partir da base, sem rede nem certificados."""
 
+    def __init__(self):
+        self._pedidos = solicitacoes.Solicitacoes(SERVIDORES)
+
     def municipios(self):
         return dominio.listar_municipios(SERVIDORES)
 
@@ -32,6 +35,14 @@ class ClienteFalso:
     def ficha(self, identificacao):
         servidor = next(s for s in SERVIDORES if s["id"] == identificacao)
         return dominio.montar_ficha(servidor)
+
+    def solicitacoes(self):
+        return self._pedidos.listar()
+
+    def documento(self, identificacao):
+        pedido = self._pedidos.obter(identificacao)
+        servidor = next(s for s in SERVIDORES if s["id"] == pedido["servidor_id"])
+        return dominio.montar_documento(servidor, pedido)
 
 
 def _percorrer(widget):
@@ -69,6 +80,15 @@ class JanelaBase(unittest.TestCase):
 
     def linhas(self):
         return [self.janela._lista.item(i, "values") for i in self.janela._lista.get_children()]
+
+    def abrir_aba(self, aba=None):
+        self.janela._abas.select(aba or self.janela._aba_solicitacoes)
+        self.raiz.update()  # entrega o evento de troca de aba, que pede a lista
+        self.esperar()
+
+    def linhas_solicitacoes(self):
+        lista = self.janela._lista_solicitacoes
+        return [lista.item(i, "values") for i in lista.get_children()]
 
 
 class InterfaceBuscaTest(JanelaBase):
@@ -248,6 +268,181 @@ class InterfaceFichaTest(JanelaBase):
         self.assertNotIn(interface._data_br(servidor["data_nascimento"]), junto)
 
 
+class InterfaceAbaSolicitacoesTest(JanelaBase):
+    def selecionar(self, identificacao):
+        self.janela._lista_solicitacoes.selection_set(str(identificacao))
+        self.raiz.update()
+        self.esperar()
+
+    def texto(self):
+        return self.janela._documento.get("1.0", "end")
+
+    def solicitacao_do_sexo(self, sexo):
+        for item in self.janela._cliente.solicitacoes():
+            documento = self.janela._cliente.documento(item["id"])
+            if documento["sexo"] == sexo:
+                return documento
+        self.fail(f"nenhuma solicitação com sexo {sexo}")
+
+    def test_A_janela_tem_as_abas_Consulta_e_Solicitacoes(self):
+        abas = self.janela._abas
+        self.assertEqual([abas.tab(a, "text") for a in abas.tabs()], ["Consulta", "Solicitações"])
+        self.assertEqual(abas.select(), str(self.janela._aba_consulta))
+
+    def test_A_aba_Solicitacoes_lista_os_requerimentos(self):
+        self.abrir_aba()
+        linhas = self.linhas_solicitacoes()
+        self.assertEqual(len(linhas), 10)
+        for numero, servidor, municipio, situacao in linhas:
+            self.assertRegex(numero, r"^REQ-2026-\d{4}$")
+            self.assertTrue(servidor and municipio)
+            self.assertEqual(situacao, "Pendente")
+
+    def test_Selecionar_uma_solicitacao_mostra_o_documento_formal(self):
+        self.abrir_aba()
+        primeira = self.janela._lista_solicitacoes.get_children()[0]
+        self.selecionar(primeira)
+        dados = self.janela._cliente.documento(int(primeira))
+        texto = self.texto()
+        self.assertTrue(texto.startswith("Requerimento de aposentadoria\n"))
+        for esperado in (
+            dados["numero"], dados["municipio"], dados["orgao"], dados["servidor_nome"],
+            interface._data_br(dados["data_ingresso"]),
+            interface._data_br(dados["data_solicitacao"]),
+            "aposentadoria voluntária", "______",
+        ):
+            self.assertIn(esperado, texto)
+        # a assinatura é a linha do nome, logo abaixo do traço
+        self.assertIn(f"______\n{dados['servidor_nome']}", texto)
+
+    def test_O_texto_concorda_com_o_sexo_do_servidor(self):
+        self.abrir_aba()
+        servidora = self.solicitacao_do_sexo("F")
+        self.selecionar(servidora["id"])
+        self.assertIn("a servidora", self.texto())
+        self.assertNotIn("o servidor ", self.texto())
+        servidor = self.solicitacao_do_sexo("M")
+        self.selecionar(servidor["id"])
+        self.assertIn("o servidor", self.texto())
+        self.assertNotIn("a servidora", self.texto())
+
+    def test_O_documento_deixa_os_dados_da_analise_para_a_consulta(self):
+        self.abrir_aba()
+        for item in self.janela._cliente.solicitacoes():
+            self.selecionar(item["id"])
+            texto = self.texto().casefold()
+            for proibido in (r"\bidade\b", "contribui", r"\bpcd\b", "doença", "remunera",
+                             "elegib", r"\bapto\b", r"pode se aposentar", "requisitos"):
+                self.assertNotRegex(texto, proibido)
+
+    def test_O_documento_e_legivel_e_avisa_que_e_ficticio(self):
+        self.abrir_aba()
+        self.selecionar(self.janela._lista_solicitacoes.get_children()[0])
+        rotulos = [str(w.cget("text")) for w in _percorrer(self.janela._aba_solicitacoes)
+                   if isinstance(w, ttk.Label)]
+        self.assertIn("Documento fictício, para demonstração", rotulos)
+        documento = self.janela._documento
+        fontes = [documento.cget("font"), documento.tag_cget("titulo", "font")]
+        for nome in fontes:
+            self.assertGreaterEqual(tkfont.Font(root=self.raiz, font=nome).actual("size"), 12)
+
+    def test_Trocar_de_aba_nao_perde_a_consulta(self):
+        self.buscar("maria")
+        self.janela._lista.selection_set(self.janela._lista.get_children()[0])
+        self.raiz.update()
+        self.esperar()
+        antes = (self.linhas(), self.janela._situacao.get(),
+                 {c: v.get() for c, v in self.janela._valores_ficha.items()})
+        self.assertTrue(antes[0] and all(antes[2].values()))
+        self.abrir_aba()
+        self.abrir_aba(self.janela._aba_consulta)
+        depois = (self.linhas(), self.janela._situacao.get(),
+                  {c: v.get() for c, v in self.janela._valores_ficha.items()})
+        self.assertEqual(depois, antes)
+        self.assertEqual(self.janela._nome.get(), "maria")
+        self.assertEqual(self.janela._lista.selection(), (self.janela._lista.get_children()[0],))
+
+    def test_Documento_que_chega_depois_de_outra_selecao_e_descartado(self):
+        self.abrir_aba()
+        a, b = self.janela._lista_solicitacoes.get_children()[:2]
+        liberar = threading.Event()
+        original = self.janela._cliente.documento
+
+        def lento(identificacao):
+            if identificacao == int(a):
+                liberar.wait(5)
+            return original(identificacao)
+
+        self.janela._cliente.documento = lento
+        self.janela._lista_solicitacoes.selection_set(a)
+        self.raiz.update()  # pede o documento de a, que demora
+        self.janela._lista_solicitacoes.selection_set(b)
+        self.raiz.update()
+        liberar.set()
+        self.esperar()
+        self.assertIn(original(int(b))["numero"], self.texto())
+
+    def test_Documento_em_voo_nao_reaparece_apos_falha_ao_recarregar_a_lista(self):
+        self.abrir_aba()
+        a = self.janela._lista_solicitacoes.get_children()[0]
+        liberar = threading.Event()
+        original = self.janela._cliente.documento
+
+        def lento(identificacao):
+            liberar.wait(5)
+            return original(identificacao)
+
+        self.janela._cliente.documento = lento
+        self.janela._lista_solicitacoes.selection_set(a)
+        self.raiz.update()
+        self.janela._cliente = ClienteParado()
+        self.janela._abas.select(self.janela._aba_consulta)
+        self.raiz.update()
+        self.janela._abas.select(self.janela._aba_solicitacoes)  # a lista falha e invalida o documento
+        self.raiz.update()
+        time.sleep(0.2)
+        self.raiz.update()
+        liberar.set()
+        self.esperar()
+        self.assertNotIn("Requerimento de aposentadoria", self.texto())
+        self.assertEqual(self.janela._situacao_solicitacoes.get(), MSG_PARADO)
+
+    def test_Lista_antiga_que_chega_depois_da_nova_e_descartada(self):
+        self.abrir_aba()
+        liberar = threading.Event()
+        original = self.janela._cliente.solicitacoes
+        chamadas = []
+
+        def lenta():
+            chamadas.append(1)
+            if len(chamadas) == 1:
+                liberar.wait(5)
+                return original()[:3]  # resposta velha, com outro conteúdo
+            return original()
+
+        self.janela._cliente.solicitacoes = lenta
+        self.janela._abas.select(self.janela._aba_consulta)
+        self.raiz.update()
+        self.janela._abas.select(self.janela._aba_solicitacoes)
+        self.raiz.update()
+        self.janela._abas.select(self.janela._aba_consulta)
+        self.raiz.update()
+        self.janela._abas.select(self.janela._aba_solicitacoes)
+        self.raiz.update()
+        liberar.set()
+        self.esperar()
+        self.assertEqual(len(self.linhas_solicitacoes()), 10)
+
+    def test_Reabrir_a_aba_atualiza_a_lista_sem_perder_a_selecao(self):
+        self.abrir_aba()
+        escolhida = self.janela._lista_solicitacoes.get_children()[2]
+        self.selecionar(escolhida)
+        self.abrir_aba(self.janela._aba_consulta)
+        self.abrir_aba()
+        self.assertEqual(len(self.linhas_solicitacoes()), 10)
+        self.assertEqual(self.janela._lista_solicitacoes.selection(), (escolhida,))
+
+
 MSG_PARADO = "Não foi possível conectar ao servidor. Verifique se ele está em execução."
 MSG_NAO_CONFIAVEL = "Servidor não confiável: o certificado não foi emitido pela CA do projeto."
 
@@ -257,6 +452,12 @@ class ClienteParado(ClienteFalso):
         raise cliente.ErroDeRede(MSG_PARADO)
 
     def buscar(self, nome, municipio=None):
+        raise cliente.ErroDeRede(MSG_PARADO)
+
+    def solicitacoes(self):
+        raise cliente.ErroDeRede(MSG_PARADO)
+
+    def documento(self, identificacao):
         raise cliente.ErroDeRede(MSG_PARADO)
 
 
@@ -272,6 +473,19 @@ class InterfaceServidorParadoTest(JanelaBase):
         self.assertEqual(self.janela._situacao.get(), MSG_PARADO)
         self.assertEqual(self.linhas(), [])
         self.assertTrue(self.janela._botao_buscar.instate(["!disabled"]))  # janela utilizável
+
+    def test_Falha_de_rede_na_aba_Solicitacoes(self):
+        self.abrir_aba()
+        self.assertEqual(self.janela._situacao_solicitacoes.get(), MSG_PARADO)
+        self.assertEqual(self.linhas_solicitacoes(), [])
+        # a janela segue viva: troca de aba e atende de novo assim que o servidor volta
+        self.abrir_aba(self.janela._aba_consulta)
+        self.janela._cliente = ClienteFalso()
+        self.buscar("pereira")
+        self.assertTrue(self.linhas())
+        self.abrir_aba()
+        self.assertEqual(len(self.linhas_solicitacoes()), 10)
+        self.assertNotEqual(self.janela._situacao_solicitacoes.get(), MSG_PARADO)
 
     def test_O_servidor_volta_a_funcionar_sem_reiniciar_a_janela(self):
         self.janela._cliente = ClienteFalso()
@@ -441,6 +655,32 @@ class InterfaceIntegracaoTest(unittest.TestCase):
             na_janela = {c: v.get() for c, v in janela._valores_ficha.items()}
         self.assertEqual(na_janela, do_servidor)
         self.assertTrue(all(na_janela.values()))
+
+    @unittest.skipUnless(_openssl(), "openssl não encontrado; veja a mensagem do script")
+    def test_A_aba_Solicitacoes_corresponde_ao_servidor(self):
+        with self.janela_no_ar() as (janela, rede, esperar):
+            janela._abas.select(janela._aba_solicitacoes)
+            janela._raiz.update()
+            esperar()
+            do_servidor = rede.solicitacoes()
+            na_janela = [
+                tuple(janela._lista_solicitacoes.item(i, "values"))
+                for i in janela._lista_solicitacoes.get_children()
+            ]
+            primeira = do_servidor[0]
+            janela._lista_solicitacoes.selection_set(str(primeira["id"]))
+            janela._raiz.update()
+            esperar()
+            texto = janela._documento.get("1.0", "end")
+            documento = rede.documento(primeira["id"])
+        self.assertEqual(len(do_servidor), 10)
+        self.assertEqual(
+            na_janela,
+            [(s["numero"], s["servidor_nome"], s["municipio"], "Pendente") for s in do_servidor],
+        )
+        self.assertIn(documento["numero"], texto)
+        self.assertIn(documento["servidor_nome"], texto)
+        self.assertIn(documento["orgao"], texto)
 
 
 if __name__ == "__main__":

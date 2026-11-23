@@ -36,6 +36,11 @@ CAMPOS_DA_FICHA = (
     ("tempo_contribuicao_anos", "Tempo de contribuição"),
 )
 _SEXOS = {"F": "Feminino", "M": "Masculino"}
+ABA_CONSULTA = "Consulta"
+ABA_SOLICITACOES = "Solicitações"
+SELECIONE_SOLICITACAO = "Selecione uma solicitação da lista para ver o documento."
+RODAPE_DOCUMENTO = "Documento fictício, para demonstração"
+ROTULOS_SITUACAO = {"pendente": "Pendente", "aprovada": "Aprovada", "desaprovada": "Desaprovada"}
 
 
 def _data_br(iso: str) -> str:
@@ -70,6 +75,31 @@ def formatar_ficha(ficha: dict) -> dict:
     }
 
 
+def formatar_documento(dados: dict) -> tuple:
+    """Requerimento como aparece na janela: texto e etiqueta alternados, prontos para o Text.
+
+    Só usa os campos do documento formal; o texto concorda com o sexo do servidor (RF-16).
+    """
+    feminino = dados["sexo"] == "F"
+    artigo, lotado, ingressado = (
+        ("a servidora", "lotada", "ingressada") if feminino else ("o servidor", "lotado", "ingressado")
+    )
+    municipio = dados["municipio"]
+    corpo = (
+        f"Ao Setor de Pessoal da Prefeitura Municipal de {municipio}.\n\n"
+        f"Requer {artigo} {dados['servidor_nome']}, {lotado} em {dados['orgao']} e {ingressado} "
+        f"em {_data_br(dados['data_ingresso'])}, a concessão de aposentadoria voluntária "
+        "e a análise do ato pelo TCM-GO.\n\n"
+        "Nestes termos, pede deferimento.\n\n"
+        f"{municipio}, {_data_br(dados['data_solicitacao'])}.\n\n"
+        f"______________________________\n{dados['servidor_nome']}\n"
+    )
+    return (
+        f"Requerimento de aposentadoria\nNº {dados['numero']}\n", "titulo",
+        corpo, "",
+    )
+
+
 class JanelaConsulta:
     def __init__(self, raiz: tk.Tk, cliente_rede):
         self._raiz = raiz
@@ -78,10 +108,12 @@ class JanelaConsulta:
         self._em_andamento = 0
         self._busca_atual = 0
         self._ficha_atual = 0
+        self._lista_atual = 0
+        self._documento_atual = 0
         self._municipios_carregados = False
 
         raiz.title(TITULO)
-        raiz.minsize(760, 640)
+        raiz.minsize(760, 700)
         self._configurar_fontes()
         self._montar()
         self._agendamento = raiz.after(INTERVALO_FILA_MS, self._drenar_fila)
@@ -119,14 +151,26 @@ class JanelaConsulta:
     def _montar(self) -> None:
         raiz = self._raiz
         raiz.columnconfigure(0, weight=1)
-        raiz.rowconfigure(2, weight=1)
+        raiz.rowconfigure(1, weight=1)
 
         ttk.Label(raiz, text=AVISO_FICTICIO, style="Aviso.TLabel", padding=8).grid(
             row=0, column=0, sticky="ew"
         )
+        self._abas = ttk.Notebook(raiz)
+        self._abas.grid(row=1, column=0, sticky="nsew")
+        self._montar_consulta()
+        self._montar_solicitacoes()
+        self._abas.bind("<<NotebookTabChanged>>", self._ao_trocar_aba)
+
+    def _montar_consulta(self) -> None:
+        raiz = ttk.Frame(self._abas)
+        raiz.columnconfigure(0, weight=1)
+        raiz.rowconfigure(1, weight=1)
+        self._aba_consulta = raiz
+        self._abas.add(raiz, text=ABA_CONSULTA)
 
         formulario = ttk.Frame(raiz, padding=(12, 12, 12, 6))
-        formulario.grid(row=1, column=0, sticky="ew")
+        formulario.grid(row=0, column=0, sticky="ew")
         formulario.columnconfigure(1, weight=1)
         ttk.Label(formulario, text="Nome").grid(row=0, column=0, sticky="w")
         ttk.Label(formulario, text="Município").grid(row=0, column=2, sticky="w", padx=(12, 0))
@@ -146,7 +190,7 @@ class JanelaConsulta:
         self._botao_buscar.grid(row=1, column=3, sticky="e", padx=(12, 0))
 
         corpo = ttk.Frame(raiz, padding=(12, 0))
-        corpo.grid(row=2, column=0, sticky="nsew")
+        corpo.grid(row=1, column=0, sticky="nsew")
         corpo.columnconfigure(0, weight=1)
         corpo.rowconfigure(0, weight=1)
         self._lista = ttk.Treeview(
@@ -163,7 +207,7 @@ class JanelaConsulta:
         self._lista.bind("<<TreeviewSelect>>", self._ao_selecionar)
 
         moldura = ttk.LabelFrame(raiz, text="Ficha do servidor", padding=12)
-        moldura.grid(row=3, column=0, sticky="ew", padx=12, pady=(8, 0))
+        moldura.grid(row=2, column=0, sticky="ew", padx=12, pady=(8, 0))
         moldura.columnconfigure((1, 3), weight=1, uniform="valor")
         self._dica_ficha = ttk.Label(moldura, text=SELECIONE_SERVIDOR)
         self._dica_ficha.grid(row=0, column=0, columnspan=4, sticky="w")
@@ -185,8 +229,134 @@ class JanelaConsulta:
 
         self._situacao = tk.StringVar()
         ttk.Label(raiz, textvariable=self._situacao, padding=(12, 8)).grid(
-            row=4, column=0, sticky="ew"
+            row=3, column=0, sticky="ew"
         )
+
+    def _montar_solicitacoes(self) -> None:
+        raiz = ttk.Frame(self._abas)
+        raiz.columnconfigure(0, weight=1)
+        raiz.rowconfigure(1, weight=1)
+        self._aba_solicitacoes = raiz
+        self._abas.add(raiz, text=ABA_SOLICITACOES)
+
+        corpo = ttk.Frame(raiz, padding=(12, 12, 12, 0))
+        corpo.grid(row=0, column=0, sticky="ew")
+        corpo.columnconfigure(0, weight=1)
+        self._lista_solicitacoes = ttk.Treeview(
+            corpo, columns=("numero", "servidor", "municipio", "situacao"),
+            show="headings", selectmode="browse", height=5,
+        )
+        for coluna, titulo, largura in (
+            ("numero", "Número", 155), ("servidor", "Servidor", 235),
+            ("municipio", "Município", 200), ("situacao", "Situação", 105),
+        ):
+            self._lista_solicitacoes.heading(coluna, text=titulo)
+            self._lista_solicitacoes.column(coluna, width=largura, anchor="w")
+        self._lista_solicitacoes.grid(row=0, column=0, sticky="ew")
+        barra = ttk.Scrollbar(corpo, orient="vertical", command=self._lista_solicitacoes.yview)
+        barra.grid(row=0, column=1, sticky="ns")
+        self._lista_solicitacoes.configure(yscrollcommand=barra.set)
+        self._lista_solicitacoes.bind("<<TreeviewSelect>>", self._ao_selecionar_solicitacao)
+
+        moldura = ttk.LabelFrame(raiz, text="Documento", padding=8)
+        moldura.grid(row=1, column=0, sticky="nsew", padx=12, pady=(8, 0))
+        moldura.columnconfigure(0, weight=1)
+        moldura.rowconfigure(0, weight=1)
+        fonte = tkfont.nametofont("TkDefaultFont")  # o Text usaria a fonte de largura fixa
+        self._documento = tk.Text(
+            moldura, wrap="word", height=17, width=60, padx=16, pady=8, relief="flat",
+            background="#ffffff", foreground="#000000", state="disabled", cursor="arrow",
+            font=fonte, spacing2=2,
+        )
+        self._documento.grid(row=0, column=0, sticky="nsew")
+        rolagem = ttk.Scrollbar(moldura, orient="vertical", command=self._documento.yview)
+        rolagem.grid(row=0, column=1, sticky="ns")
+        self._documento.configure(yscrollcommand=rolagem.set)
+        self._documento.tag_configure(
+            "titulo", justify="center", spacing3=6,
+            font=tkfont.Font(root=self._raiz, family=fonte.actual("family"),
+                             size=TAMANHO_FONTE_PT + 4, weight="bold"),
+        )
+        self._documento.tag_configure("centro", justify="center")
+        self._escrever_documento(SELECIONE_SOLICITACAO, "centro")
+        # Fora do Text, para o aviso nunca sair da vista quando o documento for longo.
+        ttk.Label(moldura, text=RODAPE_DOCUMENTO, foreground="#555555", anchor="center").grid(
+            row=1, column=0, sticky="ew", pady=(6, 0)
+        )
+
+        self._situacao_solicitacoes = tk.StringVar()
+        ttk.Label(raiz, textvariable=self._situacao_solicitacoes, padding=(12, 8)).grid(
+            row=2, column=0, sticky="ew"
+        )
+
+    def _ao_trocar_aba(self, _evento) -> None:
+        if self._abas.select() == str(self._aba_solicitacoes):
+            self._carregar_solicitacoes()
+
+    def _carregar_solicitacoes(self) -> None:
+        self._lista_atual += 1
+        numero = self._lista_atual
+        self._executar(
+            self._cliente.solicitacoes,
+            lambda itens, erro: self._mostrar_solicitacoes(numero, itens, erro),
+        )
+
+    def _mostrar_solicitacoes(self, numero, itens, erro) -> None:
+        if numero != self._lista_atual:
+            return  # uma consulta mais nova da lista já foi pedida
+        selecionada = self._lista_solicitacoes.selection()
+        self._lista_solicitacoes.delete(*self._lista_solicitacoes.get_children())
+        if erro is not None:
+            self._limpar_documento()
+            self._mostrar_erro(erro, self._situacao_solicitacoes)
+            return
+        for item in itens:
+            self._lista_solicitacoes.insert(
+                "", "end", iid=str(item["id"]),
+                values=(item["numero"], item["servidor_nome"], item["municipio"],
+                        ROTULOS_SITUACAO.get(item["situacao"], item["situacao"])),
+            )
+        self._situacao_solicitacoes.set(f"{len(itens)} solicitação(ões)")
+        if selecionada and self._lista_solicitacoes.exists(selecionada[0]):
+            self._lista_solicitacoes.selection_set(selecionada[0])
+        else:
+            self._limpar_documento()
+
+    def _ao_selecionar_solicitacao(self, _evento) -> None:
+        selecionadas = self._lista_solicitacoes.selection()
+        if not selecionadas:
+            return
+        identificacao = int(selecionadas[0])
+        self._documento_atual += 1
+        numero = self._documento_atual
+        self._executar(
+            lambda: self._cliente.documento(identificacao),
+            lambda dados, erro: self._mostrar_documento(numero, dados, erro),
+        )
+
+    def _mostrar_documento(self, numero, dados, erro) -> None:
+        if numero != self._documento_atual:
+            return  # outra seleção ou uma nova lista já aconteceu
+        if erro is not None:
+            self._limpar_documento()  # não deixa na tela o documento de outra linha
+            self._mostrar_erro(erro, self._situacao_solicitacoes)
+            return
+        self._situacao_solicitacoes.set(
+            f"{len(self._lista_solicitacoes.get_children())} solicitação(ões)"
+        )
+        self._escrever_documento(*formatar_documento(dados))
+
+    def _limpar_documento(self) -> None:
+        self._documento_atual += 1  # descarta o documento que ainda esteja a caminho
+        self._escrever_documento(SELECIONE_SOLICITACAO, "centro")
+
+    def _escrever_documento(self, *partes) -> None:
+        """`partes` alternam texto e a etiqueta de formatação (ou "") dele."""
+        self._documento.configure(state="normal")
+        self._documento.delete("1.0", "end")
+        for texto, etiqueta in zip(partes[::2], partes[1::2]):
+            self._documento.insert("end", texto, etiqueta)
+        self._documento.configure(state="disabled")
 
     def _executar(self, trabalho, ao_concluir) -> None:
         """Roda `trabalho` numa thread; `ao_concluir(resultado, erro)` roda na thread da janela."""
@@ -274,12 +444,13 @@ class JanelaConsulta:
         self._campos_ficha.grid_remove()
         self._dica_ficha.grid()
 
-    def _mostrar_erro(self, erro) -> None:
+    def _mostrar_erro(self, erro, destino=None) -> None:
+        destino = self._situacao if destino is None else destino
         if isinstance(erro, rede.ErroDeRede):
-            self._situacao.set(str(erro))
+            destino.set(str(erro))
         else:
             traceback.print_exception(erro)  # a causa vai ao terminal; a janela mostra só o aviso
-            self._situacao.set("Erro inesperado ao consultar o servidor.")
+            destino.set("Erro inesperado ao consultar o servidor.")
 
 
 def main(argumentos=None) -> int:
