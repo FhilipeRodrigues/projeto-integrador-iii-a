@@ -146,6 +146,7 @@ class Servidor:
             "ficha": self._ficha,
             "solicitacoes": self._solicitacoes,
             "documento": self._documento,
+            "decidir": self._decidir,
         }.get(operacao)
         if tratar is None:
             raise protocolo.ErroDeAtendimento(protocolo.OPERACAO_DESCONHECIDA, "Operação desconhecida.")
@@ -173,17 +174,38 @@ class Servidor:
             raise _invalida("informe a identificação (número inteiro) do servidor.")
         for servidor in self._servidores:
             if servidor["id"] == identificacao:
-                return dominio.montar_ficha(servidor)
+                return dominio.montar_ficha(servidor, self._pedidos.situacao_do_servidor(identificacao))
         raise protocolo.ErroDeAtendimento(protocolo.NAO_ENCONTRADO, "Servidor não encontrado.")
 
     def _solicitacoes(self, _requisicao):
         return self._pedidos.listar()
 
     def _documento(self, requisicao):
+        solicitacao = self._pedidos.obter(self._identificacao_da_solicitacao(requisicao))
+        return self._documento_de(solicitacao)
+
+    def _decidir(self, requisicao):
+        identificacao = self._identificacao_da_solicitacao(requisicao)
+        decisao = requisicao.get("decisao")
+        if decisao not in solicitacoes.DECISOES:  # também recusa o que não é texto
+            raise _invalida("a decisão deve ser 'aprovada' ou 'desaprovada'.")
+        try:
+            solicitacao = self._pedidos.decidir(identificacao, decisao)
+        except OSError as erro:  # o OSError de _responder é o do canal; este é o do arquivo
+            self._log(f"op=decidir falha_ao_gravar ({type(erro).__name__})")
+            raise protocolo.ErroDeAtendimento(
+                protocolo.ERRO_INTERNO, "Não foi possível gravar a decisão. Tente novamente."
+            ) from erro
+        return self._documento_de(solicitacao)
+
+    @staticmethod
+    def _identificacao_da_solicitacao(requisicao) -> int:
         identificacao = requisicao.get("id")
         if type(identificacao) is not int:
             raise _invalida("informe a identificação (número inteiro) da solicitação.")
-        solicitacao = self._pedidos.obter(identificacao)
+        return identificacao
+
+    def _documento_de(self, solicitacao):
         if solicitacao is None:
             raise protocolo.ErroDeAtendimento(protocolo.NAO_ENCONTRADO, "Solicitação não encontrada.")
         servidor = next(s for s in self._servidores if s["id"] == solicitacao["servidor_id"])

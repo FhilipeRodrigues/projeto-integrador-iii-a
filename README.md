@@ -50,6 +50,10 @@ python -m consulta.interface
 
 Opções: `--host`, `--porta` e `--ca` (caminho do `ca.crt`). Na janela, digite `maria` e clique em Buscar. A lista mostra os servidores com esse nome (1 na base fictícia). Escolha um para ver a ficha.
 
+Na aba **Solicitações**, escolha um requerimento para ver o documento e clique em **Aprovar** ou **Desaprovar**. A última decisão vale, e a situação aparece na lista, no documento e na ficha do servidor (aba Consulta).
+
+**Zerar as decisões:** pare o servidor, apague `data/solicitacoes.json` e inicie o servidor de novo. Ele sorteia 10 solicitações novas, todas pendentes. A decisão fica nesse arquivo, por isso sobrevive a reiniciar o servidor.
+
 ## Demonstração de segurança: o cliente recusa um servidor falso
 
 O cliente só aceita certificados assinados pela CA em `certs/ca.crt`. Para ver a recusa, suba um servidor com um certificado de **outra CA**:
@@ -84,7 +88,7 @@ Os testes de integração geram certificados em pasta temporária e sobem o serv
 ```
 consulta/    servidor, cliente de rede, protocolo, regras e janela
 scripts/     gerar_base.py (reproduz a base) e gerar_certificados.py
-data/        servidores.json (base fictícia)
+data/        servidores.json (base fictícia) e solicitacoes.json (criado pelo servidor)
 tests/       testes automatizados
 docs/        PRD, TechSpec, tasks e checkpoints
 ```

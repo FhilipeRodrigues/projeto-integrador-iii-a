@@ -34,6 +34,7 @@ CAMPOS_DA_FICHA = (
     ("data_solicitacao", "Data da solicitação"),
     ("ultima_remuneracao_centavos", "Última remuneração"),
     ("tempo_contribuicao_anos", "Tempo de contribuição"),
+    ("situacao_solicitacao", "Situação da solicitação"),
 )
 _SEXOS = {"F": "Feminino", "M": "Masculino"}
 ABA_CONSULTA = "Consulta"
@@ -41,6 +42,7 @@ ABA_SOLICITACOES = "Solicitações"
 SELECIONE_SOLICITACAO = "Selecione uma solicitação da lista para ver o documento."
 RODAPE_DOCUMENTO = "Documento fictício, para demonstração"
 ROTULOS_SITUACAO = {"pendente": "Pendente", "aprovada": "Aprovada", "desaprovada": "Desaprovada"}
+SEM_SOLICITACAO = "Nenhuma solicitação"
 
 
 def _data_br(iso: str) -> str:
@@ -72,7 +74,21 @@ def formatar_ficha(ficha: dict) -> dict:
         "data_solicitacao": _data_br(ficha["data_solicitacao"]),
         "ultima_remuneracao_centavos": _dinheiro_br(ficha["ultima_remuneracao_centavos"]),
         "tempo_contribuicao_anos": _anos(ficha["tempo_contribuicao_anos"]),
+        "situacao_solicitacao": _rotulo_da_situacao(ficha["situacao_solicitacao"]),
     }
+
+
+def _rotulo_da_situacao(situacao) -> str:
+    return SEM_SOLICITACAO if situacao is None else ROTULOS_SITUACAO.get(situacao, situacao)
+
+
+def _situacao_do_documento(dados: dict) -> str:
+    """Linha "Situação: Aprovada em 23/11/2026 às 14:05" (sem data enquanto pendente)."""
+    situacao = f"Situação: {_rotulo_da_situacao(dados['situacao'])}"
+    if dados["decidida_em"] is not None:
+        data, hora = dados["decidida_em"].split("T")
+        situacao += f" em {_data_br(data)} às {hora[:5]}"
+    return situacao + "\n"
 
 
 def formatar_documento(dados: dict) -> tuple:
@@ -96,6 +112,7 @@ def formatar_documento(dados: dict) -> tuple:
     )
     return (
         f"Requerimento de aposentadoria\nNº {dados['numero']}\n", "titulo",
+        _situacao_do_documento(dados), "situacao",
         corpo, "",
     )
 
@@ -110,6 +127,7 @@ class JanelaConsulta:
         self._ficha_atual = 0
         self._lista_atual = 0
         self._documento_atual = 0
+        self._decidindo = False
         self._municipios_carregados = False
 
         raiz.title(TITULO)
@@ -247,8 +265,8 @@ class JanelaConsulta:
             show="headings", selectmode="browse", height=5,
         )
         for coluna, titulo, largura in (
-            ("numero", "Número", 155), ("servidor", "Servidor", 235),
-            ("municipio", "Município", 200), ("situacao", "Situação", 105),
+            ("numero", "Número", 145), ("servidor", "Servidor", 235),
+            ("municipio", "Município", 190), ("situacao", "Situação", 125),
         ):
             self._lista_solicitacoes.heading(coluna, text=titulo)
             self._lista_solicitacoes.column(coluna, width=largura, anchor="w")
@@ -277,6 +295,11 @@ class JanelaConsulta:
             font=tkfont.Font(root=self._raiz, family=fonte.actual("family"),
                              size=TAMANHO_FONTE_PT + 4, weight="bold"),
         )
+        self._documento.tag_configure(
+            "situacao", justify="center", spacing3=12,
+            font=tkfont.Font(root=self._raiz, family=fonte.actual("family"),
+                             size=TAMANHO_FONTE_PT, weight="bold"),
+        )
         self._documento.tag_configure("centro", justify="center")
         self._escrever_documento(SELECIONE_SOLICITACAO, "centro")
         # Fora do Text, para o aviso nunca sair da vista quando o documento for longo.
@@ -284,14 +307,28 @@ class JanelaConsulta:
             row=1, column=0, sticky="ew", pady=(6, 0)
         )
 
+        decisao = ttk.Frame(raiz, padding=(12, 8, 12, 0))
+        decisao.grid(row=2, column=0, sticky="e")
+        self._botao_aprovar = ttk.Button(
+            decisao, text="Aprovar", command=lambda: self.decidir("aprovada")
+        )
+        self._botao_aprovar.grid(row=0, column=0, padx=(0, 12))
+        self._botao_desaprovar = ttk.Button(
+            decisao, text="Desaprovar", command=lambda: self.decidir("desaprovada")
+        )
+        self._botao_desaprovar.grid(row=0, column=1)
+        self._atualizar_botoes()
+
         self._situacao_solicitacoes = tk.StringVar()
         ttk.Label(raiz, textvariable=self._situacao_solicitacoes, padding=(12, 8)).grid(
-            row=2, column=0, sticky="ew"
+            row=3, column=0, sticky="ew"
         )
 
     def _ao_trocar_aba(self, _evento) -> None:
         if self._abas.select() == str(self._aba_solicitacoes):
             self._carregar_solicitacoes()
+        elif self._lista.selection():
+            self._ao_selecionar(None)  # a decisão pode ter mudado a situação na ficha aberta
 
     def _carregar_solicitacoes(self) -> None:
         self._lista_atual += 1
@@ -321,12 +358,14 @@ class JanelaConsulta:
             self._lista_solicitacoes.selection_set(selecionada[0])
         else:
             self._limpar_documento()
+        self._atualizar_botoes()
 
     def _ao_selecionar_solicitacao(self, _evento) -> None:
         selecionadas = self._lista_solicitacoes.selection()
         if not selecionadas:
             return
         identificacao = int(selecionadas[0])
+        self._atualizar_botoes()
         self._documento_atual += 1
         numero = self._documento_atual
         self._executar(
@@ -346,9 +385,46 @@ class JanelaConsulta:
         )
         self._escrever_documento(*formatar_documento(dados))
 
+    def decidir(self, decisao: str) -> None:
+        """Aprova ou desaprova a solicitação selecionada; a última decisão vale."""
+        selecionadas = self._lista_solicitacoes.selection()
+        if not selecionadas or self._decidindo:
+            return
+        identificacao = int(selecionadas[0])
+        self._decidindo = True
+        self._atualizar_botoes()
+        self._executar(
+            lambda: self._cliente.decidir(identificacao, decisao),
+            self._mostrar_decisao,
+        )
+
+    def _mostrar_decisao(self, documento, erro) -> None:
+        self._decidindo = False
+        self._atualizar_botoes()
+        if erro is not None:
+            self._mostrar_erro(erro, self._situacao_solicitacoes)  # a tela segue como estava
+            return
+        identificacao = str(documento["id"])
+        if self._lista_solicitacoes.exists(identificacao):
+            self._lista_solicitacoes.set(
+                identificacao, "situacao", _rotulo_da_situacao(documento["situacao"])
+            )
+        if self._lista_solicitacoes.selection() == (identificacao,):
+            self._documento_atual += 1  # um documento antigo ainda a caminho não pode sobrescrever
+            self._escrever_documento(*formatar_documento(documento))
+        self._situacao_solicitacoes.set(
+            f"{len(self._lista_solicitacoes.get_children())} solicitação(ões)"
+        )
+
+    def _atualizar_botoes(self) -> None:
+        pronto = bool(self._lista_solicitacoes.selection()) and not self._decidindo
+        for botao in (self._botao_aprovar, self._botao_desaprovar):
+            botao.state(["!disabled" if pronto else "disabled"])
+
     def _limpar_documento(self) -> None:
         self._documento_atual += 1  # descarta o documento que ainda esteja a caminho
         self._escrever_documento(SELECIONE_SOLICITACAO, "centro")
+        self._atualizar_botoes()
 
     def _escrever_documento(self, *partes) -> None:
         """`partes` alternam texto e a etiqueta de formatação (ou "") dele."""

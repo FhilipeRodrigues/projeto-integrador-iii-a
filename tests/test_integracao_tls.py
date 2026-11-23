@@ -201,7 +201,7 @@ class CanalSeguroTest(unittest.TestCase):
             set(ficha),
             {"id", "nome", "municipio", "sexo", "idade", "orgao", "pcd", "doenca_profissional",
              "data_ingresso", "data_solicitacao", "ultima_remuneracao_centavos",
-             "tempo_contribuicao_anos"},
+             "tempo_contribuicao_anos", "situacao_solicitacao"},
         )
 
     def test_Idade_e_tempo_de_contribuicao_vem_calculados_pelo_servidor(self):
@@ -470,6 +470,151 @@ class SolicitacoesPelaRedeTest(unittest.TestCase):
         registro = "\n".join(linhas)
         self.assertIn("op=solicitacoes", registro)
         self.assertIn("op=documento", registro)
+        for servidor_da_base in self.servidores:
+            self.assertNotIn(servidor_da_base["nome"], registro)
+
+
+@unittest.skipUnless(_openssl(), "openssl não encontrado; veja a mensagem do script")
+class DecisaoPelaRedeTest(unittest.TestCase):
+    @classmethod
+    def setUpClass(cls):
+        cls._tmp = tempfile.TemporaryDirectory()
+        cls.certs = gerar_certificados.gerar_certificados(Path(cls._tmp.name) / "certs")
+        cls.servidores = base.carregar(RAIZ / "data" / "servidores.json")["servidores"]
+
+    @classmethod
+    def tearDownClass(cls):
+        cls._tmp.cleanup()
+
+    def setUp(self):
+        self._pasta = tempfile.TemporaryDirectory()
+        self.addCleanup(self._pasta.cleanup)
+        self.arquivo = Path(self._pasta.name) / "solicitacoes.json"
+
+    def _no_ar(self):
+        pedidos = solicitacoes.Solicitacoes(self.servidores, self.arquivo)
+        return servidor_no_ar(self.servidores, self.certs, pedidos)
+
+    def _cliente(self, srv):
+        return cliente.ClienteRede("127.0.0.1", srv.porta, self.certs / "ca.crt")
+
+    def test_Aprovar_e_desaprovar_devolvem_o_documento_atualizado(self):
+        with self._no_ar() as (srv, _):
+            c = self._cliente(srv)
+            primeira, segunda = c.solicitacoes()[:2]
+            aprovada = c.decidir(primeira["id"], "aprovada")
+            desaprovada = c.decidir(segunda["id"], "desaprovada")
+            lista = {i["id"]: i["situacao"] for i in c.solicitacoes()}
+            relida = c.documento(primeira["id"])
+        self.assertEqual(set(aprovada), SolicitacoesPelaRedeTest.CAMPOS_DO_DOCUMENTO)
+        self.assertEqual((aprovada["situacao"], desaprovada["situacao"]), ("aprovada", "desaprovada"))
+        self.assertRegex(aprovada["decidida_em"], r"^\d{4}-\d\d-\d\dT\d\d:\d\d:\d\d$")
+        self.assertEqual(relida, aprovada)
+        self.assertEqual(lista[primeira["id"]], "aprovada")
+        self.assertEqual(lista[segunda["id"]], "desaprovada")
+
+    def test_Trocar_a_decisao(self):
+        with self._no_ar() as (srv, _):
+            c = self._cliente(srv)
+            ident = c.solicitacoes()[0]["id"]
+            c.decidir(ident, "aprovada")
+            trocada = c.decidir(ident, "desaprovada")
+        self.assertEqual(trocada["situacao"], "desaprovada")
+
+    def test_A_decisao_sobrevive_a_reiniciar_o_servidor(self):
+        with self._no_ar() as (srv, _):
+            c = self._cliente(srv)
+            ids = [i["id"] for i in c.solicitacoes()]
+            c.decidir(ids[0], "aprovada")
+            c.decidir(ids[1], "desaprovada")
+        with self._no_ar() as (srv, _):  # outro servidor no ar, mesmo arquivo
+            situacoes = [i["situacao"] for i in self._cliente(srv).solicitacoes()]
+        self.assertEqual(situacoes, ["aprovada", "desaprovada"] + ["pendente"] * 8)
+
+    def test_A_ficha_mostra_a_situacao_da_solicitacao_do_servidor(self):
+        pedidos = solicitacoes.Solicitacoes(self.servidores, self.arquivo)
+        com_solicitacao = pedidos.obter(1)["servidor_id"]
+        sem_solicitacao = next(
+            s["id"] for s in self.servidores
+            if pedidos.situacao_do_servidor(s["id"]) is None
+        )
+        with servidor_no_ar(self.servidores, self.certs, pedidos) as (srv, _):
+            c = self._cliente(srv)
+            antes = c.ficha(com_solicitacao)["situacao_solicitacao"]
+            c.decidir(1, "aprovada")
+            depois = c.ficha(com_solicitacao)["situacao_solicitacao"]
+            sem = c.ficha(sem_solicitacao)["situacao_solicitacao"]
+        self.assertEqual((antes, depois, sem), ("pendente", "aprovada", None))
+
+    def test_A_situacao_registra_a_decisao_e_nao_indica_aptidao(self):
+        with self._no_ar() as (srv, _):
+            c = self._cliente(srv)
+            c.decidir(c.solicitacoes()[0]["id"], "aprovada")
+            brutos = [json.dumps(c.documento(i["id"])).lower() for i in c.solicitacoes()]
+            situacoes = {i["situacao"] for i in c.solicitacoes()}
+        for bruto in brutos:
+            for vedado in ("apto", "elegib", "pode se aposentar"):
+                self.assertNotIn(vedado, bruto)
+        self.assertLessEqual(situacoes, {"pendente", "aprovada", "desaprovada"})
+
+    def test_Decisao_com_dados_invalidos(self):
+        with self._no_ar() as (srv, _):
+            c = self._cliente(srv)
+            ident = c.solicitacoes()[0]["id"]
+            for decisao in ("pendente", "APROVADA", "", None, 1, ["aprovada"]):
+                resposta = c.consultar({"op": "decidir", "id": ident, "decisao": decisao})
+                self.assertEqual(resposta["erro"]["codigo"], "REQUISICAO_INVALIDA")
+            for invalido in ("1", None, 1.5, True):
+                resposta = c.consultar({"op": "decidir", "id": invalido, "decisao": "aprovada"})
+                self.assertEqual(resposta["erro"]["codigo"], "REQUISICAO_INVALIDA")
+            resposta = c.consultar({"op": "decidir", "decisao": "aprovada"})
+            self.assertEqual(resposta["erro"]["codigo"], "REQUISICAO_INVALIDA")
+            resposta = c.consultar({"op": "decidir", "id": 999, "decisao": "aprovada"})
+            self.assertEqual(resposta["erro"]["codigo"], "NAO_ENCONTRADO")
+            depois = c.solicitacoes()  # o servidor continua atendendo
+        self.assertEqual({i["situacao"] for i in depois}, {"pendente"})
+
+    def test_Duas_decisoes_ao_mesmo_tempo_ficam_registradas(self):
+        with self._no_ar() as (srv, _):
+            c = self._cliente(srv)
+            ids = [i["id"] for i in c.solicitacoes()]
+            with futures.ThreadPoolExecutor(max_workers=len(ids)) as pool:
+                respostas = list(pool.map(
+                    lambda n: c.consultar({"op": "decidir", "id": ids[n],
+                                           "decisao": "aprovada" if n % 2 else "desaprovada"}),
+                    range(len(ids)),
+                ))
+            lista = c.solicitacoes()
+        self.assertTrue(all(r["ok"] for r in respostas))
+        self.assertEqual(
+            [i["situacao"] for i in lista],
+            ["desaprovada" if n % 2 == 0 else "aprovada" for n in range(len(ids))],
+        )
+        reaberto = solicitacoes.Solicitacoes(self.servidores, self.arquivo)  # o arquivo segue válido
+        self.assertEqual([i["situacao"] for i in reaberto.listar()], [i["situacao"] for i in lista])
+
+    def test_Falha_ao_gravar_devolve_erro_interno_e_mantem_a_situacao(self):
+        with self._no_ar() as (srv, _):
+            c = self._cliente(srv)
+            ident = c.solicitacoes()[0]["id"]
+            with mock.patch("consulta.solicitacoes.os.replace", side_effect=OSError("disco cheio")):
+                resposta = c.consultar({"op": "decidir", "id": ident, "decisao": "aprovada"})
+            depois = c.solicitacoes()[0]["situacao"]
+            de_novo = c.decidir(ident, "aprovada")  # o servidor segue atendendo
+        self.assertEqual(resposta["erro"]["codigo"], "ERRO_INTERNO")
+        self.assertNotIn("disco cheio", resposta["erro"]["mensagem"])
+        self.assertEqual(depois, "pendente")
+        self.assertEqual(de_novo["situacao"], "aprovada")
+
+    def test_O_log_registra_a_decisao_sem_nomes(self):
+        with self._no_ar() as (srv, linhas):
+            c = self._cliente(srv)
+            c.decidir(c.solicitacoes()[0]["id"], "aprovada")
+            limite = time.monotonic() + 5
+            while len(linhas) < 2 and time.monotonic() < limite:
+                time.sleep(0.01)
+        registro = "\n".join(linhas)
+        self.assertIn("op=decidir resultado=ok", registro)
         for servidor_da_base in self.servidores:
             self.assertNotIn(servidor_da_base["nome"], registro)
 

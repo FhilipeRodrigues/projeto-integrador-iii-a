@@ -34,13 +34,18 @@ class ClienteFalso:
 
     def ficha(self, identificacao):
         servidor = next(s for s in SERVIDORES if s["id"] == identificacao)
-        return dominio.montar_ficha(servidor)
+        return dominio.montar_ficha(servidor, self._pedidos.situacao_do_servidor(identificacao))
 
     def solicitacoes(self):
         return self._pedidos.listar()
 
     def documento(self, identificacao):
         pedido = self._pedidos.obter(identificacao)
+        servidor = next(s for s in SERVIDORES if s["id"] == pedido["servidor_id"])
+        return dominio.montar_documento(servidor, pedido)
+
+    def decidir(self, identificacao, decisao):
+        pedido = self._pedidos.decidir(identificacao, decisao)
         servidor = next(s for s in SERVIDORES if s["id"] == pedido["servidor_id"])
         return dominio.montar_documento(servidor, pedido)
 
@@ -201,7 +206,7 @@ class InterfaceFichaTest(JanelaBase):
                    if isinstance(w, ttk.Label)]
         for _, rotulo in interface.CAMPOS_DA_FICHA:
             self.assertIn(rotulo, rotulos)
-        self.assertEqual(len(self.ficha()), 11)
+        self.assertEqual(len(self.ficha()), 12)
         self.assertTrue(all(self.ficha().values()))
         self.assertEqual(self.ficha()["nome"], servidor["nome"])
         self.assertEqual(self.ficha()["municipio"], servidor["municipio"])
@@ -460,6 +465,9 @@ class ClienteParado(ClienteFalso):
     def documento(self, identificacao):
         raise cliente.ErroDeRede(MSG_PARADO)
 
+    def decidir(self, identificacao, decisao):
+        raise cliente.ErroDeRede(MSG_PARADO)
+
 
 class InterfaceServidorParadoTest(JanelaBase):
     cliente_de_rede = ClienteParado
@@ -492,6 +500,141 @@ class InterfaceServidorParadoTest(JanelaBase):
         self.buscar("pereira")
         self.assertTrue(self.linhas())
         self.assertGreater(len(self.janela._seletor.cget("values")), 1)
+
+
+class InterfaceDecisaoTest(JanelaBase):
+    def setUp(self):
+        super().setUp()
+        self.abrir_aba()
+        self.pedidos = self.janela._cliente._pedidos
+
+    def selecionar(self, identificacao):
+        self.janela._lista_solicitacoes.selection_set(str(identificacao))
+        self.raiz.update()
+        self.esperar()
+
+    def decidir(self, botao):
+        botao.invoke()
+        self.esperar()
+
+    def texto(self):
+        return self.janela._documento.get("1.0", "end")
+
+    def situacao_na_lista(self, identificacao):
+        return self.janela._lista_solicitacoes.set(str(identificacao), "situacao")
+
+    def ficha_do_servidor_da(self, identificacao):
+        """Na aba Consulta: busca o servidor da solicitação, abre a ficha e devolve a situação."""
+        servidor_id = self.pedidos.obter(identificacao)["servidor_id"]
+        nome = next(s["nome"] for s in SERVIDORES if s["id"] == servidor_id)
+        self.abrir_aba(self.janela._aba_consulta)
+        self.buscar(nome)
+        self.janela._lista.selection_set(str(servidor_id))
+        self.raiz.update()
+        self.esperar()
+        return self.janela._valores_ficha["situacao_solicitacao"].get()
+
+    def test_Os_botoes_so_valem_com_uma_solicitacao_selecionada(self):
+        botoes = (self.janela._botao_aprovar, self.janela._botao_desaprovar)
+        self.assertEqual([b.cget("text") for b in botoes], ["Aprovar", "Desaprovar"])
+        self.assertTrue(all(b.instate(["disabled"]) for b in botoes))
+        self.selecionar(1)
+        self.assertTrue(all(b.instate(["!disabled"]) for b in botoes))
+
+    def test_Aprovar_uma_solicitacao(self):
+        self.selecionar(1)
+        self.assertIn("Situação: Pendente", self.texto())
+        self.decidir(self.janela._botao_aprovar)
+        decidida_em = self.pedidos.obter(1)["decidida_em"]
+        data, hora = decidida_em.split("T")
+        self.assertIn(f"Situação: Aprovada em {interface._data_br(data)} às {hora[:5]}", self.texto())
+        self.assertEqual(self.situacao_na_lista(1), "Aprovada")
+        self.assertEqual(self.situacao_na_lista(2), "Pendente")
+        self.assertTrue(self.janela._botao_aprovar.instate(["!disabled"]))  # a decisão é reversível
+
+    def test_Desaprovar_uma_solicitacao(self):
+        self.selecionar(2)
+        self.decidir(self.janela._botao_desaprovar)
+        self.assertRegex(self.texto(), r"Situação: Desaprovada em \d\d/\d\d/\d{4} às \d\d:\d\d")
+        self.assertEqual(self.situacao_na_lista(2), "Desaprovada")
+
+    def test_Trocar_a_decisao(self):
+        self.selecionar(1)
+        self.decidir(self.janela._botao_aprovar)
+        self.decidir(self.janela._botao_desaprovar)
+        self.assertIn("Situação: Desaprovada", self.texto())
+        self.assertNotIn("Situação: Aprovada", self.texto())
+        self.assertEqual(self.situacao_na_lista(1), "Desaprovada")
+        self.assertEqual(self.pedidos.obter(1)["situacao"], "desaprovada")
+
+    def test_A_decisao_continua_ao_recarregar_a_lista(self):
+        self.selecionar(1)
+        self.decidir(self.janela._botao_aprovar)
+        self.abrir_aba(self.janela._aba_consulta)
+        self.abrir_aba()
+        self.assertEqual(self.situacao_na_lista(1), "Aprovada")
+
+    def test_A_situacao_aparece_na_ficha_do_servidor(self):
+        self.selecionar(1)
+        self.decidir(self.janela._botao_aprovar)
+        self.assertEqual(self.ficha_do_servidor_da(1), "Aprovada")
+
+    def test_Servidor_sem_solicitacao_na_ficha(self):
+        com_solicitacao = {self.pedidos.obter(n)["servidor_id"] for n in range(1, 11)}
+        sem = next(s for s in SERVIDORES if s["id"] not in com_solicitacao)
+        self.abrir_aba(self.janela._aba_consulta)
+        self.buscar(sem["nome"])
+        self.janela._lista.selection_set(str(sem["id"]))
+        self.raiz.update()
+        self.esperar()
+        self.assertEqual(
+            self.janela._valores_ficha["situacao_solicitacao"].get(), "Nenhuma solicitação"
+        )
+
+    def test_Fluxo_da_demonstracao(self):
+        self.selecionar(1)
+        self.assertEqual(self.ficha_do_servidor_da(1), "Pendente")
+        self.abrir_aba()
+        self.decidir(self.janela._botao_aprovar)
+        self.abrir_aba(self.janela._aba_consulta)  # a ficha já aberta se atualiza ao voltar
+        self.assertEqual(self.janela._valores_ficha["situacao_solicitacao"].get(), "Aprovada")
+
+    def test_Servidor_fora_do_ar_na_hora_de_decidir(self):
+        self.selecionar(1)
+        antes = self.texto()
+        self.janela._cliente = ClienteParado()
+        self.decidir(self.janela._botao_aprovar)
+        self.assertEqual(self.janela._situacao_solicitacoes.get(), MSG_PARADO)
+        self.assertEqual(self.situacao_na_lista(1), "Pendente")
+        self.assertEqual(self.texto(), antes)
+        self.assertEqual(self.pedidos.obter(1)["situacao"], "pendente")
+        self.assertTrue(self.janela._botao_aprovar.instate(["!disabled"]))  # dá para tentar de novo
+
+    def test_Documento_antigo_em_voo_nao_apaga_a_decisao(self):
+        liberar = threading.Event()
+        original = self.janela._cliente.documento
+
+        def lento(identificacao):
+            documento = original(identificacao)  # fotografia de antes da decisão
+            liberar.wait(5)
+            return documento
+
+        self.janela._cliente.documento = lento
+        self.janela._lista_solicitacoes.selection_set("1")
+        self.raiz.update()
+        self.janela.decidir("aprovada")
+        limite = time.monotonic() + 5
+        while self.janela._decidindo and time.monotonic() < limite:
+            self.raiz.update()
+            time.sleep(0.01)
+        liberar.set()
+        self.esperar()
+        self.assertIn("Situação: Aprovada", self.texto())
+
+    def test_Sem_selecao_decidir_nao_faz_nada(self):
+        self.janela.decidir("aprovada")
+        self.esperar()
+        self.assertEqual({i["situacao"] for i in self.pedidos.listar()}, {"pendente"})
 
 
 class InterfaceConsultaLentaTest(JanelaBase):
@@ -681,6 +824,40 @@ class InterfaceIntegracaoTest(unittest.TestCase):
         self.assertIn(documento["numero"], texto)
         self.assertIn(documento["servidor_nome"], texto)
         self.assertIn(documento["orgao"], texto)
+
+    @unittest.skipUnless(_openssl(), "openssl não encontrado; veja a mensagem do script")
+    def test_Aprovar_na_janela_chega_ao_servidor_e_volta_na_ficha(self):
+        with self.janela_no_ar() as (janela, rede, esperar):
+            janela._abas.select(janela._aba_solicitacoes)
+            janela._raiz.update()
+            esperar()
+            primeira = rede.solicitacoes()[0]
+            janela._lista_solicitacoes.selection_set(str(primeira["id"]))
+            janela._raiz.update()
+            esperar()
+            janela._botao_aprovar.invoke()
+            esperar()
+            no_servidor = rede.documento(primeira["id"])
+            na_lista = janela._lista_solicitacoes.set(str(primeira["id"]), "situacao")
+            texto = janela._documento.get("1.0", "end")
+            servidor_id = next(
+                s["id"] for s in SERVIDORES
+                if s["nome"] == primeira["servidor_nome"] and s["municipio"] == primeira["municipio"]
+            )
+            ficha_no_servidor = rede.ficha(servidor_id)["situacao_solicitacao"]
+            janela._abas.select(janela._aba_consulta)
+            janela._nome.set(primeira["servidor_nome"])
+            janela.buscar()
+            esperar()
+            janela._lista.selection_set(str(servidor_id))
+            janela._raiz.update()
+            esperar()
+            na_ficha = janela._valores_ficha["situacao_solicitacao"].get()
+        self.assertEqual(no_servidor["situacao"], "aprovada")
+        self.assertEqual(ficha_no_servidor, "aprovada")
+        self.assertEqual((na_lista, na_ficha), ("Aprovada", "Aprovada"))
+        data, hora = no_servidor["decidida_em"].split("T")
+        self.assertIn(f"Situação: Aprovada em {interface._data_br(data)} às {hora[:5]}", texto)
 
 
 if __name__ == "__main__":

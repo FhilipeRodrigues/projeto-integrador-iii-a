@@ -38,8 +38,11 @@ def anos_completos(inicio: date, fim: date) -> int:
     return anos
 
 
-def montar_ficha(servidor: dict) -> dict:
+def montar_ficha(servidor: dict, situacao_solicitacao: str | None = None) -> dict:
     """Ficha enviada ao cliente: idade e tempo calculados até a data da solicitação.
+
+    `situacao_solicitacao` é a decisão registrada pelo usuário (pendente, aprovada ou
+    desaprovada), ou None se o servidor não tem solicitação.
 
     A data de nascimento não entra na ficha, e não há campo de elegibilidade.
     """
@@ -59,6 +62,7 @@ def montar_ficha(servidor: dict) -> dict:
         "tempo_contribuicao_anos": anos_completos(
             date.fromisoformat(servidor["data_ingresso"]), solicitacao
         ),
+        "situacao_solicitacao": situacao_solicitacao,
     }
 
 

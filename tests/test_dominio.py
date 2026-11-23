@@ -6,7 +6,7 @@ from consulta import dominio
 CAMPOS_DA_FICHA = {
     "id", "nome", "municipio", "sexo", "idade", "orgao", "pcd",
     "doenca_profissional", "data_ingresso", "data_solicitacao",
-    "ultima_remuneracao_centavos", "tempo_contribuicao_anos",
+    "ultima_remuneracao_centavos", "tempo_contribuicao_anos", "situacao_solicitacao",
 }
 
 
@@ -78,8 +78,15 @@ class FichaTest(unittest.TestCase):
                 "data_solicitacao": "2026-09-15",
                 "ultima_remuneracao_centavos": 485000,
                 "tempo_contribuicao_anos": 32,
+                "situacao_solicitacao": None,
             },
         )
+
+    def test_a_ficha_traz_a_situacao_registrada_da_solicitacao(self):
+        for situacao in ("pendente", "aprovada", "desaprovada"):
+            self.assertEqual(
+                dominio.montar_ficha(servidor(), situacao)["situacao_solicitacao"], situacao
+            )
 
     def test_doenca_profissional_vazia_significa_que_nao_ha(self):
         ficha = dominio.montar_ficha(servidor(doenca_profissional=None))

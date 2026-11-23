@@ -3,6 +3,8 @@ import io
 import json
 import tempfile
 import unittest
+from concurrent import futures
+from datetime import datetime
 from pathlib import Path
 from unittest import mock
 
@@ -106,6 +108,78 @@ class SolicitacoesTest(unittest.TestCase):
             {"id", "numero", "situacao", "decidida_em", "municipio", "orgao", "servidor_nome",
              "sexo", "data_ingresso", "data_solicitacao"},
         )
+
+    def test_Aprovar_e_desaprovar_registram_a_situacao_e_a_hora(self):
+        pedidos = solicitacoes.Solicitacoes(self.servidores, self.caminho)
+        aprovada = pedidos.decidir(1, "aprovada")
+        desaprovada = pedidos.decidir(2, "desaprovada")
+        self.assertEqual((aprovada["situacao"], desaprovada["situacao"]), ("aprovada", "desaprovada"))
+        for decidida in (aprovada, desaprovada):
+            datetime.strptime(decidida["decidida_em"], solicitacoes.FORMATO_DECISAO)
+        situacoes = [i["situacao"] for i in pedidos.listar()]
+        self.assertEqual(situacoes, ["aprovada", "desaprovada"] + ["pendente"] * 8)
+
+    def test_Trocar_a_decisao_a_ultima_vale(self):
+        pedidos = solicitacoes.Solicitacoes(self.servidores, self.caminho)
+        pedidos.decidir(1, "aprovada")
+        pedidos.decidir(1, "desaprovada")
+        self.assertEqual(pedidos.obter(1)["situacao"], "desaprovada")
+        self.assertEqual(self._gravado()["solicitacoes"][0]["situacao"], "desaprovada")
+
+    def test_A_decisao_sobrevive_a_reiniciar(self):
+        pedidos = solicitacoes.Solicitacoes(self.servidores, self.caminho)
+        pedidos.decidir(3, "aprovada")
+        pedidos.decidir(4, "desaprovada")
+        depois = solicitacoes.Solicitacoes(self.servidores, self.caminho)
+        situacoes = {i["id"]: i["situacao"] for i in depois.listar()}
+        self.assertEqual(situacoes[3], "aprovada")
+        self.assertEqual(situacoes[4], "desaprovada")
+        self.assertEqual({v for k, v in situacoes.items() if k not in (3, 4)}, {"pendente"})
+        self.assertEqual(depois.obter(3)["decidida_em"], pedidos.obter(3)["decidida_em"])
+
+    def test_Decisao_invalida_ou_solicitacao_inexistente_nao_muda_nada(self):
+        pedidos = solicitacoes.Solicitacoes(self.servidores, self.caminho)
+        antes = self.caminho.read_bytes()
+        for invalida in ("pendente", "talvez", None, 1, ["aprovada"]):
+            with self.assertRaises(ValueError):
+                pedidos.decidir(1, invalida)
+        self.assertIsNone(pedidos.decidir(999, "aprovada"))
+        self.assertEqual(self.caminho.read_bytes(), antes)
+        self.assertEqual({i["situacao"] for i in pedidos.listar()}, {"pendente"})
+
+    def test_A_situacao_do_servidor_vem_da_solicitacao_dele(self):
+        pedidos = solicitacoes.Solicitacoes(self.servidores)
+        servidor_id = pedidos.obter(1)["servidor_id"]
+        self.assertEqual(pedidos.situacao_do_servidor(servidor_id), "pendente")
+        pedidos.decidir(1, "aprovada")
+        self.assertEqual(pedidos.situacao_do_servidor(servidor_id), "aprovada")
+        sem = next(s["id"] for s in self.servidores if s["id"] not in
+                   {i["servidor_id"] for i in (pedidos.obter(n) for n in range(1, 11))})
+        self.assertIsNone(pedidos.situacao_do_servidor(sem))
+
+    def test_Duas_decisoes_ao_mesmo_tempo_nao_se_perdem_nem_corrompem_o_arquivo(self):
+        pedidos = solicitacoes.Solicitacoes(self.servidores, self.caminho)
+        saida = futures.ThreadPoolExecutor(max_workers=10)
+        with saida:
+            for resultado in saida.map(
+                lambda n: pedidos.decidir(n, "aprovada" if n % 2 else "desaprovada"), range(1, 11)
+            ):
+                self.assertIsNotNone(resultado)
+        esperado = {n: "aprovada" if n % 2 else "desaprovada" for n in range(1, 11)}
+        for origem in (pedidos, solicitacoes.Solicitacoes(self.servidores, self.caminho)):
+            self.assertEqual({i["id"]: i["situacao"] for i in origem.listar()}, esperado)
+        self.assertEqual([p.name for p in self.caminho.parent.iterdir()], [self.caminho.name])
+
+    def test_Falha_ao_gravar_a_decisao_mantem_a_situacao_anterior(self):
+        pedidos = solicitacoes.Solicitacoes(self.servidores, self.caminho)
+        pedidos.decidir(1, "aprovada")
+        antes = self.caminho.read_bytes()
+        with mock.patch("consulta.solicitacoes.os.replace", side_effect=OSError("disco cheio")):
+            with self.assertRaises(OSError):
+                pedidos.decidir(1, "desaprovada")
+        self.assertEqual(pedidos.obter(1)["situacao"], "aprovada")
+        self.assertEqual(self.caminho.read_bytes(), antes)
+        self.assertEqual([p.name for p in self.caminho.parent.iterdir()], [self.caminho.name])
 
     def test_Arquivo_com_servidor_inexistente_e_recusado_com_solicitacao_e_campo(self):
         conteudo = self._arquivo_valido()

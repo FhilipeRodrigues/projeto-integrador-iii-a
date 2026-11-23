@@ -8,12 +8,14 @@ import json
 import os
 import random
 import tempfile
+import threading
 from datetime import datetime
 from pathlib import Path
 
 ANO_DO_NUMERO = 2026
 SITUACAO_INICIAL = "pendente"
-SITUACOES = ("pendente", "aprovada", "desaprovada")
+DECISOES = ("aprovada", "desaprovada")
+SITUACOES = (SITUACAO_INICIAL, *DECISOES)
 FORMATO_DECISAO = "%Y-%m-%dT%H:%M:%S"
 
 
@@ -102,12 +104,13 @@ class Solicitacoes:
     def __init__(self, servidores: list, caminho=None):
         self._servidores = {s["id"]: s for s in servidores}
         self._caminho = Path(caminho) if caminho is not None else None
+        self._trava = threading.Lock()  # uma decisão por vez; a leitura não precisa dela
         if self._caminho is not None and self._caminho.exists():
             self._itens = self._carregar()
         else:
             self._itens = _sortear(servidores)
             if self._caminho is not None:
-                self._gravar()
+                self._gravar(self._itens)
 
     def listar(self) -> list:
         """Resumo de cada solicitação, ordenado pelo número."""
@@ -128,6 +131,33 @@ class Solicitacoes:
             if s["id"] == ident:
                 return dict(s)
         return None
+
+    def situacao_do_servidor(self, servidor_id: int):
+        """Situação da solicitação do servidor, ou None se ele não tem solicitação."""
+        return next((s["situacao"] for s in self._itens if s["servidor_id"] == servidor_id), None)
+
+    def decidir(self, ident: int, decisao: str):
+        """Registra a decisão (a última vale) e devolve a solicitação (cópia); None se não existir.
+
+        A lista é trocada inteira só depois de gravada: se a gravação falhar, a situação em
+        memória e o arquivo continuam como estavam e o erro sobe (RNF-07).
+        """
+        if decisao not in DECISOES:
+            raise ValueError(f"decisão deve ser uma de {', '.join(DECISOES)}")
+        with self._trava:
+            posicao = next((i for i, s in enumerate(self._itens) if s["id"] == ident), None)
+            if posicao is None:
+                return None
+            decidida = {
+                **self._itens[posicao],
+                "situacao": decisao,
+                "decidida_em": datetime.now().strftime(FORMATO_DECISAO),
+            }
+            itens = [*self._itens[:posicao], decidida, *self._itens[posicao + 1:]]
+            if self._caminho is not None:
+                self._gravar(itens)
+            self._itens = itens
+            return dict(decidida)
 
     def _carregar(self) -> list:
         try:
@@ -151,7 +181,7 @@ class Solicitacoes:
             _validar(item, posicao, self._servidores, ids_vistos, servidores_vistos)
         return sorted(itens, key=lambda s: s["id"])
 
-    def _gravar(self) -> None:
+    def _gravar(self, itens: list) -> None:
         """Grava por arquivo temporário e troca atômica: nunca deixa o arquivo pela metade."""
         self._caminho.parent.mkdir(parents=True, exist_ok=True)
         descritor, temporario = tempfile.mkstemp(
@@ -159,7 +189,7 @@ class Solicitacoes:
         )
         try:
             with os.fdopen(descritor, "w", encoding="utf-8") as arquivo:
-                json.dump({"ficticio": True, "solicitacoes": self._itens}, arquivo,
+                json.dump({"ficticio": True, "solicitacoes": itens}, arquivo,
                           ensure_ascii=False, indent=2)
                 arquivo.flush()
                 os.fsync(arquivo.fileno())

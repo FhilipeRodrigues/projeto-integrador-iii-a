@@ -80,6 +80,10 @@ class ClienteRede:
         """Dados do requerimento de aposentadoria de uma solicitação."""
         return self._dados({"op": "documento", "id": identificacao})
 
+    def decidir(self, identificacao: int, decisao: str) -> dict:
+        """Registra "aprovada" ou "desaprovada" na solicitação; devolve o documento atualizado."""
+        return self._dados({"op": "decidir", "id": identificacao, "decisao": decisao})
+
     def _dados(self, requisicao: dict):
         resposta = self.consultar(requisicao)
         if resposta.get("ok") is not True:

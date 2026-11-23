@@ -19,7 +19,7 @@ PRD: [prd.md](prd.md) · TechSpec: [techspec.md](techspec.md)
 | 13 | [Nomes mais variados na base](tasks/13-nomes-da-base.md) | RF-01 | 01 | feita |
 | 14 | [Solicitações no servidor](tasks/14-solicitacoes-no-servidor.md) | RF-15, RF-16, RNF-07 | 06, 13 | feita |
 | 15 | [Aba Solicitações na janela](tasks/15-aba-solicitacoes.md) | RF-12, RF-16 | 10, 11, 14 | feita |
-| 16 | [Aprovar ou desaprovar, com situação persistente](tasks/16-aprovar-desaprovar.md) | RF-09, RF-12, RF-17, RF-18, RNF-07 | 14, 15 | pendente |
+| 16 | [Aprovar ou desaprovar, com situação persistente](tasks/16-aprovar-desaprovar.md) | RF-09, RF-12, RF-17, RF-18, RNF-07 | 14, 15 | feita |
 
 **Ordem sugerida de execução:** 01 a 12 (feitas), depois 13, 14, 15, 16 (revisão de 2026-11-18, ver PRD). As tasks 02, 03 e 04 não dependem entre si.
 
