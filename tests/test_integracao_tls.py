@@ -11,7 +11,7 @@ from concurrent import futures
 from pathlib import Path
 from unittest import mock
 
-from consulta import base, cliente, dominio, servidor
+from consulta import base, cliente, dominio, servidor, solicitacoes
 from scripts import gerar_certificados
 
 RAIZ = Path(__file__).resolve().parent.parent
@@ -25,10 +25,10 @@ def _openssl():
 
 
 @contextlib.contextmanager
-def servidor_no_ar_em(servidores, pasta_certs, porta):
+def servidor_no_ar_em(servidores, pasta_certs, porta, pedidos=None):
     """Sobe o servidor na `porta` dada (0 = livre); devolve (servidor, linhas de log)."""
     linhas = []
-    srv = servidor.Servidor(servidores, pasta_certs, "127.0.0.1", porta, log=linhas.append)
+    srv = servidor.Servidor(servidores, pasta_certs, "127.0.0.1", porta, log=linhas.append, pedidos=pedidos)
     srv.iniciar()
     fio = threading.Thread(target=srv.servir)
     fio.start()
@@ -39,9 +39,9 @@ def servidor_no_ar_em(servidores, pasta_certs, porta):
         fio.join(timeout=5)
 
 
-def servidor_no_ar(servidores, pasta_certs):
+def servidor_no_ar(servidores, pasta_certs, pedidos=None):
     """Sobe o servidor numa porta livre; devolve (servidor, linhas de log)."""
-    return servidor_no_ar_em(servidores, pasta_certs, 0)
+    return servidor_no_ar_em(servidores, pasta_certs, 0, pedidos)
 
 
 @unittest.skipUnless(_openssl(), "openssl não encontrado; veja a mensagem do script")
@@ -155,7 +155,10 @@ class CanalSeguroTest(unittest.TestCase):
 
             erro = io.StringIO()
             with contextlib.redirect_stderr(erro):
-                codigo = servidor.main(["--certs", vazia, "--porta", "0"])
+                codigo = servidor.main([
+                    "--certs", vazia, "--porta", "0",
+                    "--solicitacoes", str(Path(vazia) / "solicitacoes.json"),
+                ])
         self.assertEqual(codigo, 1)
         self.assertIn("gerar_certificados.py", erro.getvalue())
 
@@ -380,6 +383,95 @@ class CanalSeguroTest(unittest.TestCase):
                 return True
             evento.wait(0.05)
         return bool(linhas)
+
+
+
+
+@unittest.skipUnless(_openssl(), "openssl não encontrado; veja a mensagem do script")
+class SolicitacoesPelaRedeTest(unittest.TestCase):
+    CAMPOS_DO_DOCUMENTO = {
+        "id", "numero", "situacao", "decidida_em", "municipio", "orgao", "servidor_nome",
+        "sexo", "data_ingresso", "data_solicitacao",
+    }
+
+    @classmethod
+    def setUpClass(cls):
+        cls._tmp = tempfile.TemporaryDirectory()
+        cls.certs = gerar_certificados.gerar_certificados(Path(cls._tmp.name) / "certs")
+        cls.servidores = base.carregar(RAIZ / "data" / "servidores.json")["servidores"]
+
+    @classmethod
+    def tearDownClass(cls):
+        cls._tmp.cleanup()
+
+    def _no_ar(self):
+        pedidos = solicitacoes.Solicitacoes(self.servidores)
+        return servidor_no_ar(self.servidores, self.certs, pedidos)
+
+    def _cliente(self, srv):
+        return cliente.ClienteRede("127.0.0.1", srv.porta, self.certs / "ca.crt")
+
+    def test_Listar_as_solicitacoes_pela_rede(self):
+        with self._no_ar() as (srv, _):
+            lista = self._cliente(srv).solicitacoes()
+        self.assertEqual(len(lista), 10)
+        for item in lista:
+            self.assertEqual(set(item), {"id", "numero", "servidor_nome", "municipio", "situacao"})
+        self.assertEqual([i["numero"] for i in lista], sorted(i["numero"] for i in lista))
+
+    def test_Abrir_o_documento_de_uma_solicitacao(self):
+        with self._no_ar() as (srv, _):
+            c = self._cliente(srv)
+            primeira = c.solicitacoes()[0]
+            documento = c.documento(primeira["id"])
+        self.assertEqual(set(documento), self.CAMPOS_DO_DOCUMENTO)
+        self.assertEqual(documento["numero"], primeira["numero"])
+        self.assertEqual(documento["servidor_nome"], primeira["servidor_nome"])
+        self.assertEqual(documento["municipio"], primeira["municipio"])
+        self.assertEqual(documento["situacao"], "pendente")
+
+    def test_O_documento_nao_expoe_dados_que_o_analista_confere_na_consulta(self):
+        with self._no_ar() as (srv, _):
+            c = self._cliente(srv)
+            brutos = [
+                json.dumps(c.documento(item["id"]), ensure_ascii=False) for item in c.solicitacoes()
+            ]
+        for bruto in brutos:
+            for vedado in ("nascimento", "idade", "contribuicao", "pcd", "doenca", "remuneracao",
+                           "apto", "elegivel", "elegibilidade"):
+                self.assertNotIn(vedado, bruto)
+
+    def test_Documento_de_solicitacao_inexistente(self):
+        with self._no_ar() as (srv, _):
+            c = self._cliente(srv)
+            resposta = c.consultar({"op": "documento", "id": 999})
+            depois = c.solicitacoes()
+        self.assertFalse(resposta["ok"])
+        self.assertEqual(resposta["erro"]["codigo"], "NAO_ENCONTRADO")
+        self.assertEqual(len(depois), 10)  # o servidor continua atendendo
+
+    def test_Documento_com_identificacao_invalida(self):
+        with self._no_ar() as (srv, _):
+            c = self._cliente(srv)
+            for invalido in ("1", None, 1.5, True):
+                resposta = c.consultar({"op": "documento", "id": invalido})
+                self.assertEqual(resposta["erro"]["codigo"], "REQUISICAO_INVALIDA")
+            resposta = c.consultar({"op": "documento"})
+        self.assertEqual(resposta["erro"]["codigo"], "REQUISICAO_INVALIDA")
+
+    def test_O_log_nao_mostra_nomes_de_servidores(self):
+        with self._no_ar() as (srv, linhas):
+            c = self._cliente(srv)
+            for item in c.solicitacoes():
+                c.documento(item["id"])
+            limite = time.monotonic() + 5
+            while len(linhas) < 11 and time.monotonic() < limite:
+                time.sleep(0.01)
+        registro = "\n".join(linhas)
+        self.assertIn("op=solicitacoes", registro)
+        self.assertIn("op=documento", registro)
+        for servidor_da_base in self.servidores:
+            self.assertNotIn(servidor_da_base["nome"], registro)
 
 
 if __name__ == "__main__":

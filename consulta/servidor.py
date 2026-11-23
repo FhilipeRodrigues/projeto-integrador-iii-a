@@ -1,6 +1,7 @@
 """Servidor TCP com TLS: uma thread por conexão, uma requisição por conexão.
 
 Uso: python -m consulta.servidor [--host 127.0.0.1] [--porta 8443] [--certs certs]
+       [--solicitacoes data/solicitacoes.json]
 """
 
 import argparse
@@ -11,11 +12,12 @@ import threading
 from datetime import datetime
 from pathlib import Path
 
-from consulta import base, dominio, protocolo
+from consulta import base, dominio, protocolo, solicitacoes
 
 RAIZ = Path(__file__).resolve().parent.parent
 PASTA_CERTS_PADRAO = RAIZ / "certs"
 BASE_PADRAO = RAIZ / "data" / "servidores.json"
+SOLICITACOES_PADRAO = RAIZ / "data" / "solicitacoes.json"
 HOST_PADRAO = "127.0.0.1"
 PORTA_PADRAO = 8443
 TIMEOUT_S = 5
@@ -52,8 +54,9 @@ def _registrar(mensagem: str) -> None:
 
 class Servidor:
     def __init__(self, servidores, pasta_certs=PASTA_CERTS_PADRAO, host=HOST_PADRAO,
-                 porta=PORTA_PADRAO, log=_registrar):
+                 porta=PORTA_PADRAO, log=_registrar, pedidos=None):
         self._servidores = servidores
+        self._pedidos = pedidos if pedidos is not None else solicitacoes.Solicitacoes(servidores)
         self._contexto = criar_contexto_tls(pasta_certs)
         self._host = host
         self._porta = porta
@@ -141,6 +144,8 @@ class Servidor:
             "municipios": self._municipios,
             "buscar": self._buscar,
             "ficha": self._ficha,
+            "solicitacoes": self._solicitacoes,
+            "documento": self._documento,
         }.get(operacao)
         if tratar is None:
             raise protocolo.ErroDeAtendimento(protocolo.OPERACAO_DESCONHECIDA, "Operação desconhecida.")
@@ -171,19 +176,37 @@ class Servidor:
                 return dominio.montar_ficha(servidor)
         raise protocolo.ErroDeAtendimento(protocolo.NAO_ENCONTRADO, "Servidor não encontrado.")
 
+    def _solicitacoes(self, _requisicao):
+        return self._pedidos.listar()
+
+    def _documento(self, requisicao):
+        identificacao = requisicao.get("id")
+        if type(identificacao) is not int:
+            raise _invalida("informe a identificação (número inteiro) da solicitação.")
+        solicitacao = self._pedidos.obter(identificacao)
+        if solicitacao is None:
+            raise protocolo.ErroDeAtendimento(protocolo.NAO_ENCONTRADO, "Solicitação não encontrada.")
+        servidor = next(s for s in self._servidores if s["id"] == solicitacao["servidor_id"])
+        return dominio.montar_documento(servidor, solicitacao)
+
 
 def main(argumentos=None) -> int:
     analisador = argparse.ArgumentParser(description="Servidor de consulta de servidores (TLS).")
     analisador.add_argument("--host", default=HOST_PADRAO)
     analisador.add_argument("--porta", type=int, default=PORTA_PADRAO)
     analisador.add_argument("--certs", default=str(PASTA_CERTS_PADRAO), help="pasta dos certificados")
+    analisador.add_argument(
+        "--solicitacoes", default=str(SOLICITACOES_PADRAO),
+        help="arquivo das solicitações (criado se não existir)",
+    )
     opcoes = analisador.parse_args(argumentos)
 
     try:
         servidores = base.carregar(BASE_PADRAO)["servidores"]
-        servidor = Servidor(servidores, opcoes.certs, opcoes.host, opcoes.porta)
+        pedidos = solicitacoes.Solicitacoes(servidores, opcoes.solicitacoes)
+        servidor = Servidor(servidores, opcoes.certs, opcoes.host, opcoes.porta, pedidos=pedidos)
         servidor.iniciar()
-    except (base.BaseInvalida, CertificadosAusentes, OSError) as erro:
+    except (base.BaseInvalida, solicitacoes.SolicitacoesInvalidas, CertificadosAusentes, OSError) as erro:
         print(f"Erro: {erro}", file=sys.stderr)
         return 1
     print(f"Servidor no ar em {opcoes.host}:{servidor.porta} (Ctrl+C para encerrar)", flush=True)

@@ -72,6 +72,14 @@ class ClienteRede:
         """Ficha do servidor, com idade e tempo de contribuição calculados pelo servidor."""
         return self._dados({"op": "ficha", "id": identificacao})
 
+    def solicitacoes(self) -> list:
+        """Solicitações (id, número, servidor, município, situação), ordenadas pelo número."""
+        return self._dados({"op": "solicitacoes"})
+
+    def documento(self, identificacao: int) -> dict:
+        """Dados do requerimento de aposentadoria de uma solicitação."""
+        return self._dados({"op": "documento", "id": identificacao})
+
     def _dados(self, requisicao: dict):
         resposta = self.consultar(requisicao)
         if resposta.get("ok") is not True:

@@ -60,3 +60,24 @@ def montar_ficha(servidor: dict) -> dict:
             date.fromisoformat(servidor["data_ingresso"]), solicitacao
         ),
     }
+
+
+def montar_documento(servidor: dict, solicitacao: dict) -> dict:
+    """Dados do requerimento enviados ao cliente (RF-16).
+
+    Só leva o que consta do documento formal: nada de nascimento, idade, tempo de contribuição,
+    PCD, doença profissional ou remuneração (o analista confere isso na consulta) e nenhum
+    campo de elegibilidade.
+    """
+    return {
+        "id": solicitacao["id"],
+        "numero": solicitacao["numero"],
+        "situacao": solicitacao["situacao"],
+        "decidida_em": solicitacao["decidida_em"],
+        "municipio": solicitacao["municipio"],
+        "orgao": servidor["orgao"],
+        "servidor_nome": servidor["nome"],
+        "sexo": servidor["sexo"],
+        "data_ingresso": servidor["data_ingresso"],
+        "data_solicitacao": servidor["data_solicitacao"],
+    }

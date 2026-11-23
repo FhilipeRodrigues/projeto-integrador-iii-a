@@ -17,3 +17,6 @@ __pycache__/
 
 # Pasta de certificados gerados localmente (chaves privadas)
 certs/
+
+# Estado da execução: solicitações sorteadas e decisões (o servidor recria)
+data/solicitacoes.json
