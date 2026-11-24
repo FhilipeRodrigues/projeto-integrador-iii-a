@@ -131,7 +131,7 @@
   <tr><td>Python 3.15 (código para 3.10+)</td><td>Servidor, cliente, scripts e testes. Módulos: <code>socket</code>, <code>ssl</code>, <code>threading</code>, <code>json</code>, <code>queue</code>, <code>unicodedata</code>, <code>datetime</code>, <code>argparse</code>.</td></tr>
   <tr><td>Tkinter / ttk</td><td>Janela do cliente: <code>Notebook</code> (abas Consulta e Solicitações), <code>Entry</code>, <code>Combobox</code>, <code>Treeview</code>, painel de ficha e <code>Text</code> para o documento.</td></tr>
   <tr><td>OpenSSL 3.5</td><td>Gera a CA local e o certificado do servidor (<code>scripts/gerar_certificados.py</code>). No Windows vem com o Git for Windows.</td></tr>
-  <tr><td><code>unittest</code> e <code>ast</code></td><td>209 testes automatizados. O <code>ast</code> confere que nenhum import sai da biblioteca padrão.</td></tr>
+  <tr><td><code>unittest</code> e <code>ast</code></td><td>210 testes automatizados. O <code>ast</code> confere que nenhum import sai da biblioteca padrão.</td></tr>
   <tr><td>Git e GitHub</td><td>Commits no padrão Conventional Commits, uma branch de trabalho e Pull Request revisado e mergeado pelo estudante.</td></tr>
   <tr><td>Claude Code</td><td>Assistente de desenvolvimento, usado no fluxo Spec-Driven (levantamento do PRD, TechSpec, tasks em Gherkin, implementação e testes). Decisões e aprovações ficaram com o estudante.</td></tr>
   <tr><td>Context7</td><td>Consulta à documentação do módulo <code>ssl</code> do CPython (3.13), para configurar a verificação estrita do certificado.</td></tr>
@@ -141,7 +141,7 @@
 <p>Capturas feitas em 24/11/2026 com o servidor e a janela reais, comunicando por TLS 1.3 em <code>127.0.0.1</code>. A faixa amarela avisa que os dados são fictícios. As capturas 7 a 10 usam um arquivo de solicitações novo, então o sorteio delas não é o mesmo da sua máquina.</p>
 
 <div class="duo">
-  <figure class="fig"><img src="img/01-inicial.png" alt="Janela inicial"><figcaption>1. Tela inicial: faixa de aviso, abas Consulta e Solicitações, nome, filtro de município e botão Buscar.</figcaption></figure>
+  <figure class="fig"><img src="img/01-inicial.png" alt="Janela inicial"><figcaption>1. Tela inicial: faixa de aviso, abas Consulta, Solicitações e Regras, nome, filtro de município e botão Buscar. A lista já abre com os 50 servidores, sem clicar em nada.</figcaption></figure>
   <figure class="fig"><img src="img/02-lista-marc.png" alt="Lista de resultados da busca marc"><figcaption>2. Busca por "marc": 2 resultados, de municípios diferentes (Márcia e Marcos).</figcaption></figure>
 </div>
 <div class="duo">
@@ -176,7 +176,7 @@
 <h2>6. Como foi testado e validado</h2>
 
 <h3>Resultado dos checks em 24/11/2026</h3>
-<pre class="cmd">python -m unittest discover -s tests          -> Ran 209 tests, OK (skipped=1)
+<pre class="cmd">python -m unittest discover -s tests          -> Ran 210 tests, OK (skipped=1)
 python -m compileall -q consulta scripts tests -> sem erros
 git check-ignore certs/servidor.key certs/ca.key -> ambos ignorados (chaves fora do Git)</pre>
 <p>O teste pulado é o que só se aplica a sistemas POSIX. Nenhum warning novo.</p>
@@ -185,7 +185,7 @@ git check-ignore certs/servidor.key certs/ca.key -> ambos ignorados (chaves fora
   <tr><th style="width:30%">Arquivo de teste</th><th style="width:9%">Testes</th><th>O que prova</th></tr>
   <tr><td>test_integracao_tls.py</td><td>49</td><td>Servidor e cliente reais com TLS: as sete operações, os códigos de erro, duas consultas simultâneas, certificado de outra CA recusado, servidor parado, busca abaixo de 1 s, decisão que sobrevive a reiniciar o servidor.</td></tr>
   <tr><td>test_solicitacoes.py</td><td>27</td><td>Sorteio de 10 solicitações gravado e reutilizado, situação inicial Pendente, aprovar, desaprovar e trocar a decisão, duas decisões ao mesmo tempo, arquivo inválido recusado, falha ao gravar sem arquivo pela metade, arquivo fora do Git.</td></tr>
-  <tr><td>test_interface.py</td><td>59</td><td>Janela com cliente falso: lista, ficha, "nenhum resultado", erro de rede, faixa "dados fictícios", fonte de 12 pt ou mais, abas Solicitações e Regras, documento formal, botões Aprovar e Desaprovar e respostas atrasadas descartadas.</td></tr>
+  <tr><td>test_interface.py</td><td>60</td><td>Janela com cliente falso: lista, ficha, "nenhum resultado", erro de rede, faixa "dados fictícios", fonte de 12 pt ou mais, abas Solicitações e Regras, documento formal, botões Aprovar e Desaprovar e respostas atrasadas descartadas.</td></tr>
   <tr><td>test_regras.py</td><td>6</td><td>Os três blocos de regras com os valores pedidos, só título e linhas de texto, e cópia que não altera o original.</td></tr>
   <tr><td>test_protocolo.py</td><td>14</td><td>Linha válida, JSON inválido, mensagem grande demais.</td></tr>
   <tr><td>test_busca.py</td><td>12</td><td>Acentos, maiúsculas, trecho do nome, filtro por município.</td></tr>
@@ -233,7 +233,7 @@ git check-ignore certs/servidor.key certs/ca.key -> ambos ignorados (chaves fora
 
   <li><strong>Terminal 2: abrir o cliente</strong>
     <pre class="cmd">python -m consulta.interface</pre>
-    <span class="esperado">Esperado: janela "Consulta de servidores municipais" com a faixa amarela "Dados fictícios, para demonstração" e as abas "Consulta" e "Solicitações". A lista de municípios carrega sozinha no filtro.</span></li>
+    <span class="esperado">Esperado: janela "Consulta de servidores municipais" com a faixa amarela "Dados fictícios, para demonstração" e as abas "Consulta" e "Solicitações". A lista já abre com os 50 servidores ("50 servidor(es) encontrado(s)"), e os municípios carregam sozinhos no filtro.</span></li>
 
   <li><strong>Busca simples.</strong> Digite <code>marc</code> e clique em Buscar.
     <span class="esperado">Esperado: 2 resultados: Márcia Rodrigues Araújo (Aparecida de Goiânia) e Marcos Santos Gonçalves (Itumbiara). Rodapé: "2 servidor(es) encontrado(s)".</span></li>
@@ -283,7 +283,7 @@ python -m consulta.servidor --certs certs/falso</pre>
   <li><strong>Conferir os testes e os segredos</strong> (qualquer terminal)
     <pre class="cmd">python -m unittest discover -s tests
 git check-ignore certs/servidor.key certs/ca.key</pre>
-    <span class="esperado">Esperado: "OK" com 209 testes (1 pulado) e as duas chaves listadas como ignoradas.</span></li>
+    <span class="esperado">Esperado: "OK" com 210 testes (1 pulado) e as duas chaves listadas como ignoradas.</span></li>
 </ol>
 
 <h2>8. O que falta e próximos passos</h2>

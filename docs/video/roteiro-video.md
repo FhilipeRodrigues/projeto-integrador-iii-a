@@ -151,7 +151,7 @@ Esperado: `OPERACAO_DESCONHECIDA` e `REQUISICAO_INVALIDA` ("a decisão deve ser 
 **Falar:**
 - "Resumindo: **TLS 1.3** com **CA local**, cliente que só confia nessa CA, validação de toda entrada, log sem conteúdo e dados mínimos."
 - "**Limites que assumo:** não há login nem perfis (qualquer cliente com a `ca.crt` consulta), tudo roda local e a demonstração é em uma máquina. Login e perfis seriam o próximo passo."
-- "Código, testes (209 passando) e instruções estão no repositório. Obrigado."
+- "Código, testes (210 passando) e instruções estão no repositório. Obrigado."
 
 ## Ligação com o material da disciplina
 

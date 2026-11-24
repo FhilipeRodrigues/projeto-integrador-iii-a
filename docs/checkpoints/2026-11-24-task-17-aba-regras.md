@@ -20,6 +20,12 @@ Complementa [2026-11-24-capturas-e-resumo.md](2026-11-24-capturas-e-resumo.md). 
 ## Pendências
 
 - **Não commitado.** Commit só a pedido.
-- **Teste instável:** 2 de 4 rodadas completas de hoje tiveram uma falha "a janela não concluiu a consulta" (limite de 5 s do `JanelaBase.esperar`); a primeira foi em `InterfaceErrosDeRedeTest`, a outra não foi identificada. As rodadas seguintes passaram. O 5 s coincide com o `TIMEOUT_S` do cliente, então pode ser uma conexão que travou até o timeout (servidor reiniciando na mesma porta). Investigar se voltar.
+- **Teste instável (RESOLVIDO em 24/11, ver abaixo):** 2 de 4 rodadas completas de hoje tiveram uma falha "a janela não concluiu a consulta" (limite de 5 s do `JanelaBase.esperar`); a primeira foi em `InterfaceErrosDeRedeTest`, a outra não foi identificada. As rodadas seguintes passaram. O 5 s coincide com o `TIMEOUT_S` do cliente, então pode ser uma conexão que travou até o timeout (servidor reiniciando na mesma porta). Investigar se voltar.
 - ~~RSA 3072 no `techspec.md`~~: resolvido em 24/11. Fica **RSA 2048** (e 825 dias de validade, também diferente do TechSpec); o TechSpec foi ajustado e os certificados não foram regerados.
 - Ensaio do fluxo com a janela e demonstração à Juliana (RP-02, antes de 26/11).
+
+## Lista inicial e causa do teste instável (24/11, depois da task 17)
+
+- A janela agora abre com **todos os servidores listados** (`JanelaConsulta.__init__` chama `buscar()` com nome vazio, que também carrega os municípios). Teste novo `test_A_janela_abre_com_todos_os_servidores_listados`; PRD (RF-05) e resumo atualizados; captura `01-inicial.png` refeita. Suíte: **210 testes OK (1 pulado)**.
+- **Causa do "a janela não concluiu a consulta":** o coletor de ciclos rodava numa thread de trabalho e finalizava variáveis do Tk de janelas de testes anteriores. Cada `Variable.__del__` fora da thread principal esperava ~1 s e acabava em `RuntimeError: main thread is not in main loop`, atrasando a consulta do teste seguinte além dos 5 s. A lista inicial aumentou as threads e a frequência.
+- **Correção (só nos testes):** `_destruir` em `tests/test_interface.py` fecha a janela e roda `gc.collect()` na thread principal, depois de soltar `self.janela`. 3 rodadas completas seguidas, sem falha e sem os `RuntimeError`.
