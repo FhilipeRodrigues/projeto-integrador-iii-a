@@ -11,7 +11,7 @@ from concurrent import futures
 from pathlib import Path
 from unittest import mock
 
-from consulta import base, cliente, dominio, servidor, solicitacoes
+from consulta import base, cliente, dominio, regras, servidor, solicitacoes
 from scripts import gerar_certificados
 
 RAIZ = Path(__file__).resolve().parent.parent
@@ -617,6 +617,51 @@ class DecisaoPelaRedeTest(unittest.TestCase):
         self.assertIn("op=decidir resultado=ok", registro)
         for servidor_da_base in self.servidores:
             self.assertNotIn(servidor_da_base["nome"], registro)
+
+
+@unittest.skipUnless(_openssl(), "openssl não encontrado; veja a mensagem do script")
+class RegrasPelaRedeTest(unittest.TestCase):
+    @classmethod
+    def setUpClass(cls):
+        cls._tmp = tempfile.TemporaryDirectory()
+        cls.certs = gerar_certificados.gerar_certificados(Path(cls._tmp.name) / "certs")
+        cls.servidores = base.carregar(RAIZ / "data" / "servidores.json")["servidores"]
+
+    @classmethod
+    def tearDownClass(cls):
+        cls._tmp.cleanup()
+
+    def _no_ar(self):
+        return servidor_no_ar(self.servidores, self.certs, solicitacoes.Solicitacoes(self.servidores))
+
+    def _cliente(self, srv):
+        return cliente.ClienteRede("127.0.0.1", srv.porta, self.certs / "ca.crt")
+
+    def test_O_cliente_recebe_as_regras_pela_rede(self):
+        with self._no_ar() as (srv, _):
+            recebidas = self._cliente(srv).regras()
+        self.assertEqual(recebidas, regras.listar())
+
+    def test_A_resposta_e_a_mesma_para_todo_cliente_e_a_qualquer_hora(self):
+        with self._no_ar() as (srv, _):
+            c = self._cliente(srv)
+            primeira = c.regras()
+            c.decidir(c.solicitacoes()[0]["id"], "aprovada")  # decidir não muda o texto
+            self.assertEqual(c.regras(), primeira)
+
+    def test_Parametros_extras_sao_ignorados(self):
+        with self._no_ar() as (srv, _):
+            resposta = self._cliente(srv).consultar({"op": "regras", "id": 1, "nome": "x"})
+        self.assertTrue(resposta["ok"])
+        self.assertEqual(resposta["dados"], regras.listar())
+
+    def test_O_log_registra_a_operacao(self):
+        with self._no_ar() as (srv, linhas):
+            self._cliente(srv).regras()
+            limite = time.monotonic() + 5
+            while len(linhas) < 1 and time.monotonic() < limite:
+                time.sleep(0.01)
+        self.assertIn("op=regras resultado=ok", "\n".join(linhas))
 
 
 if __name__ == "__main__":

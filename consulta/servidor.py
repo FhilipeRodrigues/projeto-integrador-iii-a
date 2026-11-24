@@ -12,7 +12,7 @@ import threading
 from datetime import datetime
 from pathlib import Path
 
-from consulta import base, dominio, protocolo, solicitacoes
+from consulta import base, dominio, protocolo, regras, solicitacoes
 
 RAIZ = Path(__file__).resolve().parent.parent
 PASTA_CERTS_PADRAO = RAIZ / "certs"
@@ -147,6 +147,7 @@ class Servidor:
             "solicitacoes": self._solicitacoes,
             "documento": self._documento,
             "decidir": self._decidir,
+            "regras": self._regras,
         }.get(operacao)
         if tratar is None:
             raise protocolo.ErroDeAtendimento(protocolo.OPERACAO_DESCONHECIDA, "Operação desconhecida.")
@@ -179,6 +180,9 @@ class Servidor:
 
     def _solicitacoes(self, _requisicao):
         return self._pedidos.listar()
+
+    def _regras(self, _requisicao):
+        return regras.listar()
 
     def _documento(self, requisicao):
         solicitacao = self._pedidos.obter(self._identificacao_da_solicitacao(requisicao))

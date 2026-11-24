@@ -52,6 +52,8 @@ Opções: `--host`, `--porta` e `--ca` (caminho do `ca.crt`). Na janela, digite 
 
 Na aba **Solicitações**, escolha um requerimento para ver o documento e clique em **Aprovar** ou **Desaprovar**. A última decisão vale, e a situação aparece na lista, no documento e na ficha do servidor (aba Consulta).
 
+A aba **Regras** mostra, só para consulta, as regras básicas de aposentadoria (regra geral, PCD e doença profissional ou acidente de trabalho). O texto vem do servidor e é simplificado: o sistema não calcula nem diz se um servidor atende.
+
 **Zerar as decisões:** pare o servidor, apague `data/solicitacoes.json` e inicie o servidor de novo. Ele sorteia 10 solicitações novas, todas pendentes. A decisão fica nesse arquivo, por isso sobrevive a reiniciar o servidor.
 
 ## Demonstração de segurança: o cliente recusa um servidor falso

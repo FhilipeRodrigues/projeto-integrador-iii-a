@@ -39,6 +39,8 @@ CAMPOS_DA_FICHA = (
 _SEXOS = {"F": "Feminino", "M": "Masculino"}
 ABA_CONSULTA = "Consulta"
 ABA_SOLICITACOES = "Solicitações"
+ABA_REGRAS = "Regras"
+RODAPE_REGRAS = "Texto simplificado, de apoio à demonstração. Não substitui a legislação."
 SELECIONE_SOLICITACAO = "Selecione uma solicitação da lista para ver o documento."
 RODAPE_DOCUMENTO = "Documento fictício, para demonstração"
 ROTULOS_SITUACAO = {"pendente": "Pendente", "aprovada": "Aprovada", "desaprovada": "Desaprovada"}
@@ -128,6 +130,8 @@ class JanelaConsulta:
         self._lista_atual = 0
         self._documento_atual = 0
         self._decidindo = False
+        self._regras_atual = 0
+        self._regras_carregadas = False
         self._municipios_carregados = False
 
         raiz.title(TITULO)
@@ -178,6 +182,7 @@ class JanelaConsulta:
         self._abas.grid(row=1, column=0, sticky="nsew")
         self._montar_consulta()
         self._montar_solicitacoes()
+        self._montar_regras()
         self._abas.bind("<<NotebookTabChanged>>", self._ao_trocar_aba)
 
     def _montar_consulta(self) -> None:
@@ -324,9 +329,75 @@ class JanelaConsulta:
             row=3, column=0, sticky="ew"
         )
 
+    def _montar_regras(self) -> None:
+        raiz = ttk.Frame(self._abas)
+        raiz.columnconfigure(0, weight=1)
+        raiz.rowconfigure(0, weight=1)
+        self._aba_regras = raiz
+        self._abas.add(raiz, text=ABA_REGRAS)
+
+        moldura = ttk.LabelFrame(raiz, text="Regras básicas", padding=8)
+        moldura.grid(row=0, column=0, sticky="nsew", padx=12, pady=(12, 0))
+        moldura.columnconfigure(0, weight=1)
+        moldura.rowconfigure(0, weight=1)
+        fonte = tkfont.nametofont("TkDefaultFont")
+        self._texto_regras = tk.Text(
+            moldura, wrap="word", height=17, width=60, padx=16, pady=8, relief="flat",
+            background="#ffffff", foreground="#000000", state="disabled", cursor="arrow",
+            font=fonte, spacing2=2,
+        )
+        self._texto_regras.grid(row=0, column=0, sticky="nsew")
+        rolagem = ttk.Scrollbar(moldura, orient="vertical", command=self._texto_regras.yview)
+        rolagem.grid(row=0, column=1, sticky="ns")
+        self._texto_regras.configure(yscrollcommand=rolagem.set)
+        self._texto_regras.tag_configure(
+            "bloco", spacing1=12, spacing3=4,
+            font=tkfont.Font(root=self._raiz, family=fonte.actual("family"),
+                             size=TAMANHO_FONTE_PT + 2, weight="bold"),
+        )
+        self._texto_regras.tag_configure("linha", lmargin1=12, lmargin2=28, spacing3=4)
+        ttk.Label(moldura, text=RODAPE_REGRAS, foreground="#555555", anchor="center").grid(
+            row=1, column=0, sticky="ew", pady=(6, 0)
+        )
+
+        self._situacao_regras = tk.StringVar()
+        ttk.Label(raiz, textvariable=self._situacao_regras, padding=(12, 8)).grid(
+            row=1, column=0, sticky="ew"
+        )
+
+    def _carregar_regras(self) -> None:
+        """Pede o texto uma vez; se a rede falhar, a próxima abertura da aba tenta de novo."""
+        if self._regras_carregadas:
+            return
+        self._regras_atual += 1
+        numero = self._regras_atual
+        self._executar(
+            self._cliente.regras,
+            lambda blocos, erro: self._mostrar_regras(numero, blocos, erro),
+        )
+
+    def _mostrar_regras(self, numero, blocos, erro) -> None:
+        if numero != self._regras_atual:
+            return  # uma consulta mais nova já foi pedida
+        if erro is not None:
+            self._mostrar_erro(erro, self._situacao_regras)
+            return
+        self._texto_regras.configure(state="normal")
+        self._texto_regras.delete("1.0", "end")
+        for bloco in blocos:
+            self._texto_regras.insert("end", bloco["titulo"] + "\n", "bloco")
+            for linha in bloco["linhas"]:
+                self._texto_regras.insert("end", "• " + linha + "\n", "linha")
+        self._texto_regras.configure(state="disabled")
+        self._regras_carregadas = True
+        self._situacao_regras.set("")
+
     def _ao_trocar_aba(self, _evento) -> None:
-        if self._abas.select() == str(self._aba_solicitacoes):
+        aba = self._abas.select()
+        if aba == str(self._aba_solicitacoes):
             self._carregar_solicitacoes()
+        elif aba == str(self._aba_regras):
+            self._carregar_regras()
         elif self._lista.selection():
             self._ao_selecionar(None)  # a decisão pode ter mudado a situação na ficha aberta
 

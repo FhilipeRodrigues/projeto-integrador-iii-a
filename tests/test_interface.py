@@ -10,7 +10,7 @@ from pathlib import Path
 from tkinter import font as tkfont
 from tkinter import ttk
 
-from consulta import base, cliente, dominio, interface, solicitacoes
+from consulta import base, cliente, dominio, interface, regras, solicitacoes
 from scripts import gerar_certificados
 from tests.test_integracao_tls import _openssl, servidor_no_ar, servidor_no_ar_em
 
@@ -48,6 +48,9 @@ class ClienteFalso:
         pedido = self._pedidos.decidir(identificacao, decisao)
         servidor = next(s for s in SERVIDORES if s["id"] == pedido["servidor_id"])
         return dominio.montar_documento(servidor, pedido)
+
+    def regras(self):
+        return regras.listar()
 
 
 def _percorrer(widget):
@@ -289,9 +292,11 @@ class InterfaceAbaSolicitacoesTest(JanelaBase):
                 return documento
         self.fail(f"nenhuma solicitação com sexo {sexo}")
 
-    def test_A_janela_tem_as_abas_Consulta_e_Solicitacoes(self):
+    def test_A_janela_tem_as_abas_Consulta_Solicitacoes_e_Regras(self):
         abas = self.janela._abas
-        self.assertEqual([abas.tab(a, "text") for a in abas.tabs()], ["Consulta", "Solicitações"])
+        self.assertEqual(
+            [abas.tab(a, "text") for a in abas.tabs()], ["Consulta", "Solicitações", "Regras"]
+        )
         self.assertEqual(abas.select(), str(self.janela._aba_consulta))
 
     def test_A_aba_Solicitacoes_lista_os_requerimentos(self):
@@ -466,6 +471,9 @@ class ClienteParado(ClienteFalso):
         raise cliente.ErroDeRede(MSG_PARADO)
 
     def decidir(self, identificacao, decisao):
+        raise cliente.ErroDeRede(MSG_PARADO)
+
+    def regras(self):
         raise cliente.ErroDeRede(MSG_PARADO)
 
 
@@ -658,6 +666,89 @@ class InterfaceConsultaLentaTest(JanelaBase):
         self.esperar()
         self.assertTrue(self.janela._botao_buscar.instate(["!disabled"]))
         self.assertTrue(self.linhas())
+
+
+class ClienteContador(ClienteFalso):
+    """Conta quantas vezes o texto das regras foi pedido ao servidor."""
+
+    def __init__(self):
+        super().__init__()
+        self.pedidos_de_regras = 0
+
+    def regras(self):
+        self.pedidos_de_regras += 1
+        return super().regras()
+
+
+class InterfaceAbaRegrasTest(JanelaBase):
+    cliente_de_rede = ClienteContador
+
+    def texto(self):
+        return self.janela._texto_regras.get("1.0", "end")
+
+    def test_A_aba_Regras_mostra_os_tres_blocos(self):
+        self.abrir_aba(self.janela._aba_regras)
+        texto = self.texto()
+        for bloco in regras.listar():
+            self.assertIn(bloco["titulo"], texto)
+            for linha in bloco["linhas"]:
+                self.assertIn(linha, texto)
+        self.assertEqual(self.janela._situacao_regras.get(), "")
+
+    def test_O_texto_nao_pode_ser_editado(self):
+        self.abrir_aba(self.janela._aba_regras)
+        self.assertEqual(str(self.janela._texto_regras.cget("state")), "disabled")
+
+    def test_O_texto_e_legivel_e_o_rodape_avisa_que_e_simplificado(self):
+        texto = self.janela._texto_regras
+        for nome in (texto.cget("font"), texto.tag_cget("bloco", "font")):
+            self.assertGreaterEqual(tkfont.Font(root=self.raiz, font=nome).actual("size"), 12)
+        rotulos = [str(w.cget("text")) for w in _percorrer(self.raiz) if "text" in w.keys()]
+        self.assertIn(interface.RODAPE_REGRAS, rotulos)
+        self.assertIn("simplificado", interface.RODAPE_REGRAS)
+        self.assertIn("Não substitui a legislação", interface.RODAPE_REGRAS)
+
+    def test_A_aba_nao_tem_botao_que_calcule_elegibilidade(self):
+        botoes = [w for w in _percorrer(self.janela._aba_regras) if isinstance(w, ttk.Button)]
+        self.assertEqual(botoes, [])
+
+    def test_Abrir_a_aba_de_novo_nao_pede_o_texto_outra_vez(self):
+        self.abrir_aba(self.janela._aba_regras)
+        self.abrir_aba(self.janela._aba_consulta)
+        self.abrir_aba(self.janela._aba_regras)
+        self.assertEqual(self.janela._cliente.pedidos_de_regras, 1)
+
+    def test_Abrir_a_aba_Regras_nao_refaz_a_ficha_da_consulta(self):
+        self.buscar("pereira")
+        self.janela._lista.selection_set(str(ID_A))
+        self.raiz.update()
+        self.esperar()
+        fichas = []
+        original = self.janela._cliente.ficha
+        self.janela._cliente.ficha = lambda i: (fichas.append(i), original(i))[1]
+        self.abrir_aba(self.janela._aba_regras)
+        self.assertEqual(fichas, [])
+
+    def test_A_aba_Consulta_continua_como_estava(self):
+        self.buscar("pereira")
+        antes = self.linhas()
+        self.abrir_aba(self.janela._aba_regras)
+        self.abrir_aba(self.janela._aba_consulta)
+        self.assertEqual(self.linhas(), antes)
+
+
+class InterfaceAbaRegrasServidorParadoTest(JanelaBase):
+    cliente_de_rede = ClienteParado
+
+    def test_Falha_de_rede_avisa_e_a_proxima_abertura_tenta_de_novo(self):
+        self.abrir_aba(self.janela._aba_regras)
+        self.assertEqual(self.janela._situacao_regras.get(), MSG_PARADO)
+        self.assertEqual(self.janela._texto_regras.get("1.0", "end").strip(), "")
+        self.janela._cliente = ClienteFalso()  # o servidor voltou
+        self.abrir_aba(self.janela._aba_consulta)
+        self.abrir_aba(self.janela._aba_regras)
+        self.assertIn("Regra geral", self.janela._texto_regras.get("1.0", "end"))
+        self.assertEqual(self.janela._situacao_regras.get(), "")
 
 
 @unittest.skipUnless(_openssl(), "openssl não encontrado; veja a mensagem do script")

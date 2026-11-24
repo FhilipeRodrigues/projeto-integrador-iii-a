@@ -84,6 +84,10 @@ class ClienteRede:
         """Registra "aprovada" ou "desaprovada" na solicitação; devolve o documento atualizado."""
         return self._dados({"op": "decidir", "id": identificacao, "decisao": decisao})
 
+    def regras(self) -> list:
+        """Blocos de texto (título e linhas) com as regras básicas de aposentadoria."""
+        return self._dados({"op": "regras"})
+
     def _dados(self, requisicao: dict):
         resposta = self.consultar(requisicao)
         if resposta.get("ok") is not True:
