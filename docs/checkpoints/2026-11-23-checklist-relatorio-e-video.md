@@ -5,7 +5,7 @@ Fechamento da pendência do `tasks.md` ("vale uma checklist própria para esses 
 ## 0. Antes de tudo
 
 - [ ] Abrir a janela de verdade e rodar o fluxo do README (servidor + interface) com a base atual (nomes novos, aba Solicitações, aprovar/desaprovar).
-- [ ] Regenerar as capturas em `docs/resumo/img/` (nomes e aba Solicitações mudaram) e o PDF do resumo (comando no checkpoint de 18/11, "Como retomar", item 5).
+- [x] Regenerar as capturas em `docs/resumo/img/` (nomes e aba Solicitações mudaram) e o PDF do resumo. Feito em 24/11, ver `2026-11-24-capturas-e-resumo.md`.
 - [ ] Se `data/solicitacoes.json` estiver com decisões de teste, apagar antes de gravar vídeo ou capturas finais (o sorteio é regravado e a situação volta a Pendente).
 
 ## 1. Demonstração à Juliana (RP-02, antes de 26/11)
