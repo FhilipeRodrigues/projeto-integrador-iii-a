@@ -42,7 +42,7 @@ O vídeo precisa mostrar a **aplicação, as funcionalidades e a comunicação c
 **Falar:**
 - "Python, só com a biblioteca padrão: `socket`, `ssl`, `threading` e Tkinter. Sem `pip install`."
 - "Cada ação da janela vira **uma requisição**: o cliente conecta, manda uma linha JSON, recebe uma linha JSON e a conexão fecha."
-- "O servidor atende **vários clientes ao mesmo tempo**, uma thread por conexão. Seis operações: municípios, buscar, ficha, solicitações, documento e decidir."
+- "O servidor atende **vários clientes ao mesmo tempo**, uma thread por conexão. Sete operações: municípios, buscar, ficha, solicitações, documento, decidir e regras."
 - "Toda a conversa passa por **TLS**, e o cliente só confia em servidor com certificado assinado pela **CA do projeto**."
 
 ## 3. Funcionalidades (1:45)
@@ -53,7 +53,8 @@ O vídeo precisa mostrar a **aplicação, as funcionalidades e a comunicação c
 1. Buscar `antonia` (sem acento): acha "Antônia". Abrir a ficha e apontar idade e tempo de contribuição ("calculados no **servidor**, o cliente só apresenta").
 2. Aba **Solicitações**: lista de 10, documento formal, **Aprovar** em uma e **Desaprovar** em outra. A situação muda na lista e no documento.
 3. Voltar à aba Consulta, abrir a ficha de um servidor decidido: campo "Situação da solicitação".
-4. Olhar o **log do servidor (T1)**: "uma linha por consulta, com a versão do TLS e a cifra".
+4. Aba **Regras**: regra geral, PCD (por tempo e por idade) e doença profissional. "O texto vem do **servidor**; a aba só consulta. O sistema **não diz** se o servidor pode se aposentar: quem decide é o analista."
+5. Olhar o **log do servidor (T1)**: "uma linha por consulta, com a versão do TLS e a cifra".
 
 ## 4. Certificados e CA (1:45)
 
@@ -150,7 +151,7 @@ Esperado: `OPERACAO_DESCONHECIDA` e `REQUISICAO_INVALIDA` ("a decisão deve ser 
 **Falar:**
 - "Resumindo: **TLS 1.3** com **CA local**, cliente que só confia nessa CA, validação de toda entrada, log sem conteúdo e dados mínimos."
 - "**Limites que assumo:** não há login nem perfis (qualquer cliente com a `ca.crt` consulta), tudo roda local e a demonstração é em uma máquina. Login e perfis seriam o próximo passo."
-- "Código, testes (191 passando) e instruções estão no repositório. Obrigado."
+- "Código, testes (209 passando) e instruções estão no repositório. Obrigado."
 
 ## Ligação com o material da disciplina
 

@@ -55,8 +55,8 @@
 <table>
   <tr><th style="width:21%">Pedido da proposta</th><th>Como o projeto atende</th><th style="width:14%">Situação</th></tr>
   <tr><td>Instituição real e necessidade identificada</td><td>TCM-GO. A análise de aposentadorias exige consultar a situação funcional de servidores de vários municípios, hoje em fontes separadas. Representante: Juliana, chefe direta do estudante.</td><td class="ok">Definido</td></tr>
-  <tr><td>Servidor que armazena, recebe solicitações, processa e devolve</td><td><code>consulta/servidor.py</code> carrega <code>data/servidores.json</code>, atende cada conexão em uma thread e executa seis operações: <code>municipios</code>, <code>buscar</code>, <code>ficha</code>, <code>solicitacoes</code>, <code>documento</code> e <code>decidir</code>. As solicitações ficam em <code>data/solicitacoes.json</code> (consulta/solicitacoes.py).</td><td class="ok">Pronto</td></tr>
-  <tr><td>Cliente que consulta por rede e apresenta de forma organizada</td><td>Janela Tkinter (<code>consulta/interface.py</code>): campo de nome, filtro de município, lista de resultados e painel com a ficha. A aba Solicitações lista os requerimentos, mostra o documento formal e tem os botões Aprovar e Desaprovar. Cada ação vira uma requisição pela rede.</td><td class="ok">Pronto</td></tr>
+  <tr><td>Servidor que armazena, recebe solicitações, processa e devolve</td><td><code>consulta/servidor.py</code> carrega <code>data/servidores.json</code>, atende cada conexão em uma thread e executa sete operações: <code>municipios</code>, <code>buscar</code>, <code>ficha</code>, <code>solicitacoes</code>, <code>documento</code>, <code>decidir</code> e <code>regras</code>. As solicitações ficam em <code>data/solicitacoes.json</code> (consulta/solicitacoes.py).</td><td class="ok">Pronto</td></tr>
+  <tr><td>Cliente que consulta por rede e apresenta de forma organizada</td><td>Janela Tkinter (<code>consulta/interface.py</code>): campo de nome, filtro de município, lista de resultados e painel com a ficha. A aba Solicitações lista os requerimentos, mostra o documento formal e tem os botões Aprovar e Desaprovar. A aba Regras mostra, só para consulta, as regras básicas de aposentadoria. Cada ação vira uma requisição pela rede.</td><td class="ok">Pronto</td></tr>
   <tr><td>Sem banco, execução local, sem hospedagem</td><td>Base em arquivo JSON, tudo em <code>127.0.0.1</code>, só biblioteca padrão do Python (um teste confere os imports).</td><td class="ok">Pronto</td></tr>
   <tr><td>Proteger a comunicação com recurso de segurança existente</td><td>TLS (módulo <code>ssl</code> do Python) com CA local criada pelo <code>openssl</code>. O cliente exige certificado assinado pela CA do projeto e recusa qualquer outro.</td><td class="ok">Pronto</td></tr>
   <tr><td>Evitar exposição de informação sensível</td><td>Base fictícia (aviso na janela e no README). A data de nascimento nunca sai do servidor, só a idade. Chaves privadas fora do Git. O log do servidor não registra o conteúdo das fichas.</td><td class="ok">Pronto</td></tr>
@@ -121,7 +121,7 @@
   <tr><td>Cálculos</td><td>Idade e tempo de contribuição em anos completos, até a data da solicitação</td><td>Mesma referência de data para os dois valores. Simplificação aceita pelo estudante.</td></tr>
   <tr><td>Solicitações</td><td>10 requerimentos fictícios sorteados uma vez e gravados em arquivo; situação persistente (Pendente, Aprovada, Desaprovada)</td><td>Mostra o fluxo do analista sem banco de dados. O documento traz só os dados do requerimento: idade, tempo de contribuição, PCD, doença e remuneração ficam na aba Consulta, para o analista conferir. A decisão pode ser trocada para repetir a demonstração.</td></tr>
   <tr><td>Escopo recusado</td><td>Sem login, sem indicar elegibilidade à aposentadoria, sem edição dos dados da base</td><td>A proposta manda evitar complexidade excessiva. O sistema só apresenta os dados da base; a única coisa gravada é a decisão das solicitações. Login ficou como melhoria futura.</td></tr>
-  <tr><td>Método de trabalho</td><td>Spec-Driven: PRD, TechSpec, 16 tasks, check-spec e execução task a task</td><td>Cada requisito (18 RF, 7 RNF, 6 RP) tem rastreio até um componente e um teste. Nada foi feito sem requisito.</td></tr>
+  <tr><td>Método de trabalho</td><td>Spec-Driven: PRD, TechSpec, 17 tasks, check-spec e execução task a task</td><td>Cada requisito (19 RF, 7 RNF, 6 RP) tem rastreio até um componente e um teste. Nada foi feito sem requisito.</td></tr>
 </table>
 
 <h2>4. Ferramentas usadas</h2>
@@ -131,7 +131,7 @@
   <tr><td>Python 3.15 (código para 3.10+)</td><td>Servidor, cliente, scripts e testes. Módulos: <code>socket</code>, <code>ssl</code>, <code>threading</code>, <code>json</code>, <code>queue</code>, <code>unicodedata</code>, <code>datetime</code>, <code>argparse</code>.</td></tr>
   <tr><td>Tkinter / ttk</td><td>Janela do cliente: <code>Notebook</code> (abas Consulta e Solicitações), <code>Entry</code>, <code>Combobox</code>, <code>Treeview</code>, painel de ficha e <code>Text</code> para o documento.</td></tr>
   <tr><td>OpenSSL 3.5</td><td>Gera a CA local e o certificado do servidor (<code>scripts/gerar_certificados.py</code>). No Windows vem com o Git for Windows.</td></tr>
-  <tr><td><code>unittest</code> e <code>ast</code></td><td>191 testes automatizados. O <code>ast</code> confere que nenhum import sai da biblioteca padrão.</td></tr>
+  <tr><td><code>unittest</code> e <code>ast</code></td><td>209 testes automatizados. O <code>ast</code> confere que nenhum import sai da biblioteca padrão.</td></tr>
   <tr><td>Git e GitHub</td><td>Commits no padrão Conventional Commits, uma branch de trabalho e Pull Request revisado e mergeado pelo estudante.</td></tr>
   <tr><td>Claude Code</td><td>Assistente de desenvolvimento, usado no fluxo Spec-Driven (levantamento do PRD, TechSpec, tasks em Gherkin, implementação e testes). Decisões e aprovações ficaram com o estudante.</td></tr>
   <tr><td>Context7</td><td>Consulta à documentação do módulo <code>ssl</code> do CPython (3.13), para configurar a verificação estrita do certificado.</td></tr>
@@ -161,25 +161,32 @@
   <figure class="fig"><img src="img/11-ficha-situacao.png" alt="Ficha com a situação da solicitação"><figcaption>10. A situação vai à ficha do servidor na aba Consulta: "Situação da solicitação: Aprovada".</figcaption></figure>
 </div>
 <div class="duo">
-  <figure class="fig"><img src="img/07-ca-falsa.png" alt="Servidor não confiável"><figcaption>11. Servidor com certificado de outra CA: o cliente recusa e avisa.</figcaption></figure>
+  <figure class="fig"><img src="img/12-regras.png" alt="Aba Regras"><figcaption>11. Aba Regras: regra geral, PCD (por tempo e por idade) e doença profissional ou acidente de trabalho. O texto vem do servidor e é só para consulta.</figcaption></figure>
   <div class="box" style="flex:1;margin-top:6px">
-    <strong>Por que a captura 11 importa.</strong> O servidor falso estava no ar e respondia por TLS, mas seu certificado foi assinado por uma CA diferente da <code>ca.crt</code> do projeto. O aperto de mão falhou antes de qualquer consulta, então nenhum dado foi trocado. O log do servidor falso registra <code>falha_de_conexao (SSLError)</code>. É a prova do requisito de proteger a comunicação (RF-14).
+    <strong>Regras só para consultar.</strong> A aba apresenta o texto das regras para o analista decidir se aprova ou desaprova. O sistema não aplica as regras à ficha nem diz se o servidor pode se aposentar (RF-09). O rodapé lembra que o texto é simplificado e não substitui a legislação.
+  </div>
+</div>
+<div class="duo">
+  <figure class="fig"><img src="img/07-ca-falsa.png" alt="Servidor não confiável"><figcaption>12. Servidor com certificado de outra CA: o cliente recusa e avisa.</figcaption></figure>
+  <div class="box" style="flex:1;margin-top:6px">
+    <strong>Por que a captura 12 importa.</strong> O servidor falso estava no ar e respondia por TLS, mas seu certificado foi assinado por uma CA diferente da <code>ca.crt</code> do projeto. O aperto de mão falhou antes de qualquer consulta, então nenhum dado foi trocado. O log do servidor falso registra <code>falha_de_conexao (SSLError)</code>. É a prova do requisito de proteger a comunicação (RF-14).
   </div>
 </div>
 
 <h2>6. Como foi testado e validado</h2>
 
 <h3>Resultado dos checks em 24/11/2026</h3>
-<pre class="cmd">python -m unittest discover -s tests          -> Ran 191 tests, OK (skipped=1)
+<pre class="cmd">python -m unittest discover -s tests          -> Ran 209 tests, OK (skipped=1)
 python -m compileall -q consulta scripts tests -> sem erros
 git check-ignore certs/servidor.key certs/ca.key -> ambos ignorados (chaves fora do Git)</pre>
 <p>O teste pulado é o que só se aplica a sistemas POSIX. Nenhum warning novo.</p>
 
 <table>
   <tr><th style="width:30%">Arquivo de teste</th><th style="width:9%">Testes</th><th>O que prova</th></tr>
-  <tr><td>test_integracao_tls.py</td><td>45</td><td>Servidor e cliente reais com TLS: as seis operações, os códigos de erro, duas consultas simultâneas, certificado de outra CA recusado, servidor parado, busca abaixo de 1 s, decisão que sobrevive a reiniciar o servidor.</td></tr>
+  <tr><td>test_integracao_tls.py</td><td>49</td><td>Servidor e cliente reais com TLS: as sete operações, os códigos de erro, duas consultas simultâneas, certificado de outra CA recusado, servidor parado, busca abaixo de 1 s, decisão que sobrevive a reiniciar o servidor.</td></tr>
   <tr><td>test_solicitacoes.py</td><td>27</td><td>Sorteio de 10 solicitações gravado e reutilizado, situação inicial Pendente, aprovar, desaprovar e trocar a decisão, duas decisões ao mesmo tempo, arquivo inválido recusado, falha ao gravar sem arquivo pela metade, arquivo fora do Git.</td></tr>
-  <tr><td>test_interface.py</td><td>51</td><td>Janela com cliente falso: lista, ficha, "nenhum resultado", erro de rede, faixa "dados fictícios", fonte de 12 pt ou mais, aba Solicitações, documento formal, botões Aprovar e Desaprovar e respostas atrasadas descartadas.</td></tr>
+  <tr><td>test_interface.py</td><td>59</td><td>Janela com cliente falso: lista, ficha, "nenhum resultado", erro de rede, faixa "dados fictícios", fonte de 12 pt ou mais, abas Solicitações e Regras, documento formal, botões Aprovar e Desaprovar e respostas atrasadas descartadas.</td></tr>
+  <tr><td>test_regras.py</td><td>6</td><td>Os três blocos de regras com os valores pedidos, só título e linhas de texto, e cópia que não altera o original.</td></tr>
   <tr><td>test_protocolo.py</td><td>14</td><td>Linha válida, JSON inválido, mensagem grande demais.</td></tr>
   <tr><td>test_busca.py</td><td>12</td><td>Acentos, maiúsculas, trecho do nome, filtro por município.</td></tr>
   <tr><td>test_certificados.py</td><td>11</td><td>Geração da CA e do certificado, <code>openssl verify</code>, chaves fora do Git.</td></tr>
@@ -197,6 +204,7 @@ git check-ignore certs/servidor.key certs/ca.key -> ambos ignorados (chaves fora
   <tr><td>RF-12, RF-13 falhas</td><td>Servidor parado vira mensagem; solicitação inválida recebe erro e o servidor segue atendendo.</td></tr>
   <tr><td>RF-14 TLS e CA local</td><td>Handshake com a CA do projeto funciona; com outra CA o cliente recusa (captura 07).</td></tr>
   <tr><td>RF-15 a RF-18 solicitações</td><td>Testes de sorteio e persistência, de decisão (a última vale) e da aba; capturas 7 a 10 (seção 5).</td></tr>
+  <tr><td>RF-19 regras</td><td>Texto entregue pelo servidor (integração por TLS), aba só de leitura, sem botão de cálculo, nova tentativa se a rede falhar; captura 11.</td></tr>
   <tr><td>RNF-01 a RNF-07</td><td>Faixa fictícia, chaves ignoradas pelo Git, busca abaixo de 1 s, imports da biblioteca padrão, fonte de 12 pt, certificados regeneráveis por script, gravação das solicitações sem corromper o arquivo.</td></tr>
 </table>
 
@@ -254,6 +262,9 @@ git check-ignore certs/servidor.key certs/ca.key -> ambos ignorados (chaves fora
   <li><strong>A decisão sobrevive a reiniciar.</strong> No Terminal 1, aperte Ctrl+C e suba o servidor de novo (<code>python -m consulta.servidor</code>). Na janela, volte à aba Solicitações (ela recarrega a lista ao ser aberta).
     <span class="esperado">Esperado: as situações decididas continuam iguais. Para voltar tudo a Pendente e sortear outros 10 servidores, pare o servidor, apague <code>data/solicitacoes.json</code> e suba o servidor de novo.</span></li>
 
+  <li><strong>Aba Regras.</strong> Clique na aba "Regras".
+    <span class="esperado">Esperado: três blocos: "Regra geral" (62 anos mulher e 65 homem; 25 anos de contribuição), "Pessoa com deficiência (PCD)" (por tempo: 25 anos homem e 20 mulher; por idade: 60 homem e 55 mulher, com 15 anos de contribuição) e "Doença profissional ou acidente de trabalho" (aprovação direta). O texto não pode ser editado, e o rodapé diz que é simplificado. Não há botão que calcule nada.</span></li>
+
   <li><strong>Vários clientes ao mesmo tempo.</strong> Abra um terceiro terminal, rode <code>python -m consulta.interface</code> de novo e faça buscas diferentes nas duas janelas.
     <span class="esperado">Esperado: as duas janelas respondem, sem uma esperar a outra.</span></li>
 
@@ -272,17 +283,17 @@ python -m consulta.servidor --certs certs/falso</pre>
   <li><strong>Conferir os testes e os segredos</strong> (qualquer terminal)
     <pre class="cmd">python -m unittest discover -s tests
 git check-ignore certs/servidor.key certs/ca.key</pre>
-    <span class="esperado">Esperado: "OK" com 191 testes (1 pulado) e as duas chaves listadas como ignoradas.</span></li>
+    <span class="esperado">Esperado: "OK" com 209 testes (1 pulado) e as duas chaves listadas como ignoradas.</span></li>
 </ol>
 
 <h2>8. O que falta e próximos passos</h2>
 <table>
   <tr><th style="width:18%">Prazo</th><th>O que fazer</th></tr>
-  <tr><td>Antes de 26/11</td><td>Demonstrar à Juliana usando o passo a passo acima (passos 2 a 12 e 16). Conferir os campos da ficha com ela e registrar por escrito as considerações.</td></tr>
+  <tr><td>Antes de 26/11</td><td>Demonstrar à Juliana usando o passo a passo acima (passos 2 a 13 e 17). Conferir os campos da ficha com ela e registrar por escrito as considerações.</td></tr>
   <tr><td>07/12, 23h59</td><td>Relatório PDF (até 5 páginas, Arial 12, margens 2,5 e 3 cm, com as capturas da seção 5); vídeo de até 10 minutos; envio nos dois campos da Plataforma A.</td></tr>
 </table>
 
-<p class="meta">Repositório: github.com/FhilipeRodrigues/projeto-integrador-iii-a. Especificação completa em <code>docs/specs/2026-11-16-consulta-servidores-tcmgo/</code> (PRD, TechSpec, 16 tasks e check-spec).</p>
+<p class="meta">Repositório: github.com/FhilipeRodrigues/projeto-integrador-iii-a. Especificação completa em <code>docs/specs/2026-11-16-consulta-servidores-tcmgo/</code> (PRD, TechSpec, 17 tasks e check-spec).</p>
 
 </body>
 </html>

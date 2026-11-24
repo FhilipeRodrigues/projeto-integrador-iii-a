@@ -1,7 +1,7 @@
 # PRD: Consulta de servidores municipais para apoio à análise de aposentadoria (TCM-GO)
 
 - **Data:** 2026-11-16
-- **Status:** aprovado (2026-11-16). **Revisão 2026-11-18** (RF-01 alterado, RF-02 e RF-09 ajustados, RF-15 a RF-18 e RNF-07 novos): aprovada pelo estudante em 2026-11-18.
+- **Status:** aprovado (2026-11-16). **Revisão 2026-11-18** (RF-01 alterado, RF-02 e RF-09 ajustados, RF-15 a RF-18 e RNF-07 novos): aprovada pelo estudante em 2026-11-18. **Revisão 2026-11-24** (RF-19 novo, aba "Regras"): pedida e escopo confirmado pelo estudante em 2026-11-24.
 
 ## Problema
 Na Secretaria de Atos de Pessoal do TCM-GO, a análise de aposentadorias exige consultar a situação funcional de servidores de vários municípios (idade, tempo de serviço, órgão, remuneração e condições especiais). Hoje essa consulta depende de procurar as informações em fontes separadas, o que é lento e sujeito a erro. A proposta do Projeto Integrador III-A pede um protótipo de consulta de informações em arquitetura cliente-servidor, com comunicação protegida, validado com um representante da instituição (Juliana, chefe direta do estudante).
@@ -25,6 +25,7 @@ O protótipo usa uma base **fictícia** (10 municípios, cerca de 50 servidores)
 - Como analista, quero usar o sistema com vários clientes abertos ao mesmo tempo, para que a consulta de um colega não bloqueie a minha. (RF-11)
 - Como avaliador, quero ver que a comunicação é cifrada e que o cliente só confia no servidor legítimo, para verificar o requisito de segurança. (RF-14)
 - Como analista, quero abrir o requerimento de aposentadoria de um servidor, conferir os dados dele na consulta e então aprová-lo ou desaprová-lo, e ver essa decisão registrada mesmo depois de reiniciar o sistema. (RF-15 a RF-18)
+- Como analista, quero consultar as regras básicas de aposentadoria numa aba da própria janela, para decidir se aprovo ou desaprovo sem sair do sistema. (RF-19)
 - Como estudante, quero cumprir as etapas de documentos, demonstração e entregas no prazo. (RP-01 a RP-06)
 
 ## Requisitos funcionais
@@ -47,6 +48,7 @@ O protótipo usa uma base **fictícia** (10 municípios, cerca de 50 servidores)
 - **RF-16:** O cliente deve ter uma aba "Solicitações", ao lado da aba "Consulta". Ela lista as solicitações (número, servidor, município e situação) e, ao selecionar uma, exibe um documento formal fictício de requerimento de aposentadoria, com o número, o município, o órgão, o nome do servidor, a data de ingresso, a data da solicitação e o texto do pedido. O documento não traz os dados que o analista deve conferir na aba "Consulta" (idade, tempo de contribuição, PCD, doença profissional e remuneração) nem indica elegibilidade.
 - **RF-17:** O documento deve ter os botões "Aprovar" e "Desaprovar". A decisão é enviada ao servidor e pode ser trocada depois (para repetir a demonstração).
 - **RF-18:** A situação de cada solicitação (Pendente, Aprovada ou Desaprovada) deve ser **persistente**: fica gravada em `data/solicitacoes.json`, sobrevive a reiniciar o servidor e aparece na lista de Solicitações, no documento e na ficha do servidor (aba "Consulta").
+- **RF-19:** O cliente deve ter uma aba "Regras", depois da aba "Solicitações", com o texto das regras básicas de aposentadoria do servidor público, para o analista consultar ao aprovar ou desaprovar: **regra geral** (idade mínima de 62 anos para mulher e 65 para homem; contribuição mínima de 25 anos para ambos), **PCD por tempo de contribuição** (25 anos para homem e 20 para mulher), **PCD por idade** (60 anos para homem e 55 para mulher, com 15 anos de contribuição) e **doença profissional ou acidente de trabalho** (em caso positivo, aprovação direta). O texto vem do servidor (operação `regras`), é fixo e simplificado, serve de apoio à demonstração e não substitui a legislação. A aba só apresenta o texto: não calcula nem indica se um servidor atende (RF-09 continua valendo).
 
 ## Requisitos não funcionais
 - **RNF-01 (dados):** A base e a interface não devem conter dados reais de pessoas ou do TCM-GO. A interface deve indicar que os dados são fictícios.

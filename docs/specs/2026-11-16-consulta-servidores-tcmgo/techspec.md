@@ -2,7 +2,7 @@
 
 - **Data:** 2026-11-16
 - **PRD:** [prd.md](prd.md)
-- **Status:** aprovado (2026-11-16). **Revisão 2026-11-18** (seção "Revisão 2026-11-18"): aprovada pelo estudante em 2026-11-18.
+- **Status:** aprovado (2026-11-16). **Revisão 2026-11-18** (seção "Revisão 2026-11-18"): aprovada pelo estudante em 2026-11-18. **Revisão 2026-11-24** (seção "Revisão 2026-11-24"): aba Regras, pedida pelo estudante em 2026-11-24.
 
 ## Visão geral
 
@@ -126,7 +126,7 @@ Qualquer erro de uma conexão afeta só ela. O servidor continua atendendo (RF-1
 - **CA local gerada com o executável `openssl`**, em vez de certificado autoassinado ou da biblioteca externa `cryptography`. A CA é a decisão do estudante e o material trata de Autoridade Certificadora. A biblioteca externa violaria o RNF-04. O custo é depender do `openssl` na hora de gerar os certificados (ver riscos).
 - **Cliente verifica servidor** (`ssl.SSLContext(PROTOCOL_TLS_CLIENT)`, `check_hostname` e `CERT_REQUIRED` ligados) carregando só a `ca.crt` do projeto. O certificado do servidor tem SAN `DNS:localhost` e `IP:127.0.0.1`. Não há autenticação do cliente (mTLS fica fora do escopo). TLS mínimo: 1.2.
 - **Certificados compatíveis com a verificação estrita.** A partir do Python 3.13, `create_default_context` liga `VERIFY_X509_STRICT` e `VERIFY_X509_PARTIAL_CHAIN` (doc do CPython 3.13.14). Por isso o script emite a CA com `basicConstraints` crítico (`CA:TRUE`), `keyUsage` crítico (`keyCertSign, cRLSign`) e `subjectKeyIdentifier`. O certificado do servidor leva `authorityKeyIdentifier`, `keyUsage` (`digitalSignature, keyEncipherment`) e `extendedKeyUsage = serverAuth`. Não desligo o modo estrito.
-- **Chaves RSA 3072**, validade de 3 anos para a CA e 1 ano para o servidor. O material cita RSA, e o tamanho é folgado e rápido de gerar.
+- **Chaves RSA 2048 com SHA-256**, validade de 825 dias para a CA e para o servidor (valores de `scripts/gerar_certificados.py`). O material cita RSA, e 2048 bits basta para o protótipo local e gera rápido. *(Ajustado em 2026-11-24: o texto original dizia RSA 3072, 3 anos para a CA e 1 ano para o servidor, mas a implementação sempre usou estes valores.)*
 - **Cálculos no servidor.** O RF-10 diz que o servidor processa e devolve. O cliente só apresenta. A fórmula fica em um lugar só e é testada sem janela.
 - **Remuneração em centavos inteiros** na base e no protocolo.
 - **`nome` vazio** na busca devolve todos os servidores (respeitando o município). Facilita a demonstração e a navegação. Confirmado pelo estudante e incorporado ao RF-03 do PRD.
@@ -234,6 +234,44 @@ Cobre RF-01 (revisado), RF-15 a RF-18 e RNF-07 do PRD. O resto do documento cont
 - `test_integracao_tls.py`: as três operações novas, os erros, o `documento` sem dados vedados, `ficha` com `situacao_solicitacao`, e reiniciar o servidor mantendo a decisão.
 - `test_interface.py` (cliente falso): abas, lista, documento, concordância de gênero, botões, atualização de lista e ficha após decidir, erro de rede. Verificação manual e captura de tela do fluxo completo.
 - Estado fora do git: `git check-ignore data/solicitacoes.json`.
+
+## Revisão 2026-11-24: aba Regras
+
+Cobre o RF-19. Revisão pequena: uma operação sem parâmetros e uma aba só de leitura.
+
+### Componentes tocados
+
+- `consulta/regras.py` (novo): o texto das regras como dado, uma lista de blocos `{"titulo", "linhas"}`, sem lógica.
+- `consulta/servidor.py`: operação `regras` no despacho, que devolve esse dado.
+- `consulta/cliente.py`: método `regras()`.
+- `consulta/interface.py`: terceira aba "Regras" com um `Text` somente leitura (mesma fonte do documento, mínimo de 12 pt) e rodapé de aviso.
+
+### Contratos de API (novos)
+
+| `op` | Entrada | Resposta de sucesso |
+|---|---|---|
+| `regras` | — | lista de blocos `{"titulo": texto, "linhas": [texto, ...]}`, na ordem de exibição |
+
+- Sem erro de entrada possível além dos gerais (`REQUISICAO_INVALIDA` para linha inválida). O log registra `op=regras resultado=ok`.
+- A resposta é igual para todos e não depende da base nem das solicitações. Nenhum campo indica elegibilidade (RF-09).
+
+### Decisões
+
+- **Texto no servidor, em módulo próprio**, e não no `interface.py`: a fonte das regras fica num lugar só e a aba entra na demonstração cliente-servidor. Sem arquivo de configuração, porque o conteúdo é fixo.
+- **Só apresentação.** Não há cálculo contra a ficha: aplicar as regras a um servidor seria indicar elegibilidade, o que o RF-09 proíbe e o analista decide.
+- **Carregamento na primeira abertura**, com nova tentativa se a rede falhou (o texto não muda, então não recarrega a cada abertura).
+- O rodapé avisa que o texto é simplificado e não substitui a legislação.
+
+### Riscos
+
+- **Conteúdo jurídico simplificado** pode ser lido como oficial. Mitigação: aviso no rodapé e no RF-19; texto fornecido pelo estudante.
+- **A lista de abas muda de duas para três**, e há teste que confere os nomes. Mitigação: atualizar esse teste junto.
+
+### Estratégia de teste
+
+- `test_regras.py` (novo): três blocos com os valores do RF-19, sem campo de elegibilidade.
+- `test_integracao_tls.py`: a operação `regras` pelo canal TLS e no log.
+- `test_interface.py`: três abas na ordem, texto exibido e somente leitura, fonte mínima, rodapé, falha de rede com nova tentativa.
 
 ## Rastreio
 
