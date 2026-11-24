@@ -140,7 +140,7 @@ class JanelaConsulta:
         self._montar()
         self._agendamento = raiz.after(INTERVALO_FILA_MS, self._drenar_fila)
         raiz.bind("<Destroy>", self._ao_destruir)
-        self._carregar_municipios()
+        self.buscar()  # nome vazio e todos os municípios: a lista já abre cheia; carrega o filtro junto
 
     def aguardando(self) -> bool:
         """Há consulta de rede em andamento ou resultado ainda não aplicado à janela."""

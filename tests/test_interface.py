@@ -1,4 +1,5 @@
 import contextlib
+import gc
 import socket
 import ssl
 import tempfile
@@ -53,6 +54,17 @@ class ClienteFalso:
         return regras.listar()
 
 
+def _destruir(raiz):
+    """Fecha a janela e recolhe o lixo aqui, na thread principal.
+
+    Sem isso o coletor de ciclos roda numa thread de trabalho e finaliza variáveis do Tk
+    de janelas já fechadas: cada uma espera ~1 s pela thread principal e atrasa a consulta
+    do teste seguinte além do limite de 5 s.
+    """
+    raiz.destroy()
+    gc.collect()
+
+
 def _percorrer(widget):
     yield widget
     for filho in widget.winfo_children():
@@ -68,7 +80,8 @@ class JanelaBase(unittest.TestCase):
         except tk.TclError as erro:
             self.skipTest(f"sem ambiente gráfico: {erro}")
         self.raiz.withdraw()
-        self.addCleanup(self.raiz.destroy)
+        self.addCleanup(_destruir, self.raiz)
+        self.addCleanup(setattr, self, "janela", None)  # roda antes: solta a janela para o coletor
         self.janela = interface.JanelaConsulta(self.raiz, self.cliente_de_rede())
         self.esperar()
 
@@ -103,6 +116,14 @@ class InterfaceBuscaTest(JanelaBase):
     def test_A_janela_avisa_que_os_dados_sao_ficticios(self):
         textos = [str(w.cget("text")) for w in _percorrer(self.raiz) if "text" in w.keys()]
         self.assertIn("Dados fictícios, para demonstração", textos)
+
+    def test_A_janela_abre_com_todos_os_servidores_listados(self):
+        linhas = self.linhas()
+        self.assertEqual(len(linhas), len(SERVIDORES))
+        self.assertEqual(linhas, [(s["nome"], s["municipio"]) for s in dominio.buscar(SERVIDORES, "")])
+        self.assertEqual(self.janela._situacao.get(), f"{len(SERVIDORES)} servidor(es) encontrado(s)")
+        self.assertEqual(self.janela._nome.get(), "")
+        self.assertFalse(self.janela._botao_buscar.instate(["disabled"]))
 
     def test_Os_municipios_aparecem_para_escolha(self):
         seletor = self.janela._seletor
@@ -770,7 +791,7 @@ class InterfaceErrosDeRedeTest(unittest.TestCase):
         except tk.TclError as erro:
             self.skipTest(f"sem ambiente gráfico: {erro}")
         raiz.withdraw()
-        self.addCleanup(raiz.destroy)
+        self.addCleanup(_destruir, raiz)
         rede = cliente.ClienteRede("127.0.0.1", porta, self.certs / "ca.crt")
         janela = interface.JanelaConsulta(raiz, rede)
         self.esperar(janela)
@@ -845,7 +866,7 @@ class InterfaceIntegracaoTest(unittest.TestCase):
         except tk.TclError as erro:
             self.skipTest(f"sem ambiente gráfico: {erro}")
         raiz.withdraw()
-        self.addCleanup(raiz.destroy)
+        self.addCleanup(_destruir, raiz)
         with tempfile.TemporaryDirectory() as tmp:
             certs = gerar_certificados.gerar_certificados(Path(tmp) / "certs")
             with servidor_no_ar(SERVIDORES, certs) as (srv, _):
@@ -859,6 +880,7 @@ class InterfaceIntegracaoTest(unittest.TestCase):
                         time.sleep(0.01)
                     raiz.update()
 
+                esperar()  # a janela já abre com a lista de todos os servidores
                 yield janela, rede, esperar
 
     @unittest.skipUnless(_openssl(), "openssl não encontrado; veja a mensagem do script")
