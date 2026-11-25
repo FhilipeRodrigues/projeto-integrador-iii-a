@@ -27,6 +27,8 @@ class ClienteFalso:
 
     def __init__(self):
         self._pedidos = solicitacoes.Solicitacoes(SERVIDORES)
+        self.contas_criadas = []
+        self.conta_ja_existe = False
 
     def municipios(self):
         return dominio.listar_municipios(SERVIDORES)
@@ -48,6 +50,12 @@ class ClienteFalso:
 
     def login(self, usuario, senha):
         self._conferir(usuario, senha)
+        return {"usuario": usuario}
+
+    def criar_conta(self, usuario, senha):
+        self.contas_criadas.append((usuario, senha))
+        if self.conta_ja_existe:
+            raise cliente.ContaJaExiste("Já existe uma conta cadastrada. Entre com ela.")
         return {"usuario": usuario}
 
     @staticmethod
@@ -506,6 +514,9 @@ class ClienteParado(ClienteFalso):
     def login(self, usuario, senha):
         raise cliente.ErroDeRede(MSG_PARADO)
 
+    def criar_conta(self, usuario, senha):
+        raise cliente.ErroDeRede(MSG_PARADO)
+
     def decidir(self, identificacao, decisao, usuario, senha):
         raise cliente.ErroDeRede(MSG_PARADO)
 
@@ -795,6 +806,155 @@ class InterfaceLoginTest(JanelaBase):
         with mock.patch.object(self.raiz, "destroy") as destruir:
             self.janela._dialogo.cancelar()
         destruir.assert_called_once_with()
+
+
+def _rotulos(dialogo):
+    return {w.cget("text") for w in _percorrer(dialogo) if isinstance(w, ttk.Label)}
+
+
+class InterfaceCriarContaTest(JanelaBase):
+    usuario_inicial = None
+
+    def abrir_criacao(self):
+        self.janela._dialogo.criar_conta()
+        self.raiz.update()
+        return self.janela._dialogo
+
+    def preencher(self, dialogo, usuario="ana", senha="senha-nova", repetida=None):
+        dialogo.campo_usuario.insert(0, usuario)
+        dialogo.campo_senha.insert(0, senha)
+        dialogo.campo_repetir.insert(0, senha if repetida is None else repetida)
+
+    def test_O_login_oferece_criar_conta(self):
+        dialogo = self.janela._dialogo
+        self.assertIsNotNone(dialogo.botao_criar_conta)
+        self.assertEqual(dialogo.botao_criar_conta.cget("text"), "Criar conta")
+        self.assertIsNone(dialogo.campo_repetir)
+
+    def test_Criar_conta_abre_a_tela_com_os_tres_campos_mascarados(self):
+        login = self.janela._dialogo
+        dialogo = self.abrir_criacao()
+        self.assertIsNot(dialogo, login)
+        self.assertFalse(login.winfo_exists())
+        self.assertLessEqual({"Usuário", "Senha", "Repita a senha"}, _rotulos(dialogo))
+        self.assertEqual(str(dialogo.campo_senha.cget("show")), "*")
+        self.assertEqual(str(dialogo.campo_repetir.cget("show")), "*")
+        self.assertIsNone(dialogo.botao_criar_conta)
+        self.assertEqual(self.raiz.state(), "withdrawn")
+
+    def test_Cancelar_a_criacao_volta_ao_login(self):
+        dialogo = self.abrir_criacao()
+        dialogo.cancelar()
+        self.raiz.update()
+        login = self.janela._dialogo
+        self.assertIsNot(login, dialogo)
+        self.assertFalse(dialogo.winfo_exists())
+        self.assertIsNotNone(login.botao_criar_conta)
+        self.assertIn(interface.INSTRUCAO_LOGIN, _rotulos(login))
+        self.assertEqual(self.janela._cliente.contas_criadas, [])
+
+    def test_Senhas_diferentes_nao_chamam_o_servidor(self):
+        dialogo = self.abrir_criacao()
+        self.preencher(dialogo, repetida="outra-coisa")
+        dialogo.confirmar()
+        self.assertFalse(self.janela.aguardando())
+        self.assertEqual(dialogo.mensagem.get(), interface.SENHAS_DIFERENTES)
+        self.assertEqual(self.janela._cliente.contas_criadas, [])
+        self.assertIs(self.janela._dialogo, dialogo)
+
+    def test_Campos_vazios_nao_chamam_o_servidor(self):
+        dialogo = self.abrir_criacao()
+        dialogo.confirmar()
+        self.assertFalse(self.janela.aguardando())
+        self.assertEqual(dialogo.mensagem.get(), interface.INFORME_CREDENCIAIS)
+
+    def test_Conta_criada_volta_ao_login_com_o_usuario_preenchido(self):
+        dialogo = self.abrir_criacao()
+        self.preencher(dialogo, USUARIO, SENHA)
+        dialogo.confirmar()
+        self.esperar()
+        login = self.janela._dialogo
+        self.assertIsNot(login, dialogo)
+        self.assertEqual(self.janela._cliente.contas_criadas, [(USUARIO, SENHA)])
+        self.assertEqual(login.campo_usuario.get(), USUARIO)
+        self.assertEqual(login.campo_senha.get(), "")
+        self.assertIn(interface.INSTRUCAO_CONTA_CRIADA, _rotulos(login))
+        self.assertIsNotNone(login.botao_criar_conta)
+        self.assertEqual(self.raiz.state(), "withdrawn")
+        self.assertEqual(self.linhas(), [])
+
+    def test_Depois_de_criar_senha_errada_falha_e_a_certa_entra(self):
+        dialogo = self.abrir_criacao()
+        self.preencher(dialogo, USUARIO, SENHA)
+        dialogo.confirmar()
+        self.esperar()
+        login = self.janela._dialogo
+        login.campo_senha.insert(0, "senha-errada")
+        login.confirmar()
+        self.esperar()
+        self.assertIs(self.janela._dialogo, login)
+        self.assertEqual(login.mensagem.get(), "Usuário ou senha inválidos.")
+        self.assertEqual(self.raiz.state(), "withdrawn")
+        login.campo_senha.insert(0, SENHA)
+        login.confirmar()
+        self.esperar()
+        self.assertIsNone(self.janela._dialogo)
+        self.assertEqual(self.raiz.state(), "normal")
+        self.assertTrue(self.linhas())
+
+    def test_Conta_ja_existente_mostra_a_mensagem_e_mantem_a_tela(self):
+        self.janela._cliente.conta_ja_existe = True
+        dialogo = self.abrir_criacao()
+        self.preencher(dialogo)
+        dialogo.confirmar()
+        self.esperar()
+        self.assertIs(self.janela._dialogo, dialogo)
+        self.assertEqual(dialogo.mensagem.get(), "Já existe uma conta cadastrada. Entre com ela.")
+        self.assertEqual(dialogo.campo_senha.get(), "")
+        self.assertEqual(dialogo.campo_repetir.get(), "")
+
+    def test_Regra_recusada_pelo_servidor_aparece_na_tela(self):
+        dialogo = self.abrir_criacao()
+        self.preencher(dialogo, "ana", "abc")
+        regra = "Dados inválidos: a senha deve ter de 4 a 100 caracteres."
+        with mock.patch.object(
+            self.janela._cliente, "criar_conta", side_effect=cliente.DadosDeContaInvalidos(regra)
+        ):
+            dialogo.confirmar()
+            self.esperar()
+        self.assertIs(self.janela._dialogo, dialogo)
+        self.assertEqual(dialogo.mensagem.get(), regra)
+
+    def test_Durante_a_criacao_os_botoes_ficam_desativados(self):
+        dialogo = self.abrir_criacao()
+        self.preencher(dialogo)
+        dialogo.confirmar()
+        self.assertTrue(dialogo.botao_confirmar.instate(["disabled"]))
+        self.assertTrue(dialogo.botao_cancelar.instate(["disabled"]))
+        self.esperar()
+
+
+class InterfaceCriarContaServidorParadoTest(JanelaBase):
+    cliente_de_rede = ClienteParado
+    usuario_inicial = None
+
+    def test_Servidor_fora_do_ar_avisa_e_deixa_tentar_de_novo(self):
+        self.janela._dialogo.criar_conta()
+        dialogo = self.janela._dialogo
+        dialogo.campo_usuario.insert(0, USUARIO)
+        for campo in (dialogo.campo_senha, dialogo.campo_repetir):
+            campo.insert(0, SENHA)
+        dialogo.confirmar()
+        self.esperar()
+        self.assertIs(self.janela._dialogo, dialogo)
+        self.assertEqual(dialogo.mensagem.get(), MSG_PARADO)
+        self.janela._cliente = ClienteFalso()  # o servidor voltou
+        for campo in (dialogo.campo_senha, dialogo.campo_repetir):
+            campo.insert(0, SENHA)
+        dialogo.confirmar()
+        self.esperar()
+        self.assertIsNot(self.janela._dialogo, dialogo)
+        self.assertEqual(self.janela._cliente.contas_criadas, [(USUARIO, SENHA)])
 
 
 class InterfaceLoginServidorParadoTest(JanelaBase):

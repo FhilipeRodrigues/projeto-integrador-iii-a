@@ -34,13 +34,9 @@ python scripts/gerar_certificados.py
 
 Isso cria a CA local e o certificado do servidor. As chaves privadas ficam só na sua máquina: `certs/` está no `.gitignore` e não vai para o repositório.
 
-**2. Criar o login** (uma vez; cria o arquivo `.env`, que não vai para o repositório):
+**2. Conta de login** (uma vez): não há nada a fazer agora. Sem o arquivo `.env`, o servidor sobe e avisa que ainda não há conta; você a cria pela janela, no passo 4 (botão **Criar conta**). O servidor gera o hash (scrypt com sal) e grava o `.env`, que não vai para o repositório e guarda só o **hash**, nunca a senha. Só se cria a conta uma vez: com o `.env` pronto, o servidor recusa uma segunda. Para refazer (por exemplo, para gravar o vídeo de novo), pare o servidor, apague o `.env` e suba o servidor outra vez.
 
-```
-python -m scripts.gerar_hash
-```
-
-O script pede a senha duas vezes, sem mostrá-la, e imprime uma linha `SENHA_HASH=...`. Copie `.env.example` para `.env`, escreva o `USUARIO=` que quiser e cole essa linha. O `.env` guarda só o **hash** da senha (scrypt com sal), nunca a senha. Sem o `.env`, o servidor não sobe e explica o que fazer. Para trocar a senha, gere outro hash e substitua a linha.
+Se preferir criar a conta à mão, rode `python -m scripts.gerar_hash`, copie `.env.example` para `.env`, escreva o `USUARIO=` que quiser e cole a linha `SENHA_HASH=...` que o script imprime. Um `.env` com hash preenchido, mas malformado, faz o servidor recusar subir e explicar o que corrigir.
 
 **3. Iniciar o servidor** (deixe esse terminal aberto):
 
@@ -56,7 +52,7 @@ Ele escuta em `127.0.0.1:8443`. Opções: `--host`, `--porta`, `--certs` (pasta 
 python -m consulta.interface
 ```
 
-Opções: `--host`, `--porta` e `--ca` (caminho do `ca.crt`). A janela abre pelo **login**: informe o usuário e a senha definidos no passo 2. Qualquer outro usuário ou senha é recusado com "Usuário ou senha inválidos.", e o programa só mostra os dados depois de entrar. Então digite `maria` e clique em Buscar. A lista mostra os servidores com esse nome (1 na base fictícia). Escolha um para ver a ficha.
+Opções: `--host`, `--porta` e `--ca` (caminho do `ca.crt`). A janela abre pelo **login**. Na primeira vez, clique em **Criar conta**, informe usuário e senha (de 4 a 100 caracteres) duas vezes e confirme: a janela volta ao login com o usuário preenchido, e você entra com a senha criada. Qualquer outro usuário ou senha é recusado com "Usuário ou senha inválidos.", e o programa só mostra os dados depois de entrar. Então digite `maria` e clique em Buscar. A lista mostra os servidores com esse nome (1 na base fictícia). Escolha um para ver a ficha.
 
 Na aba **Solicitações**, escolha um requerimento para ver o documento e clique em **Aprovar** ou **Desaprovar**. A janela pede a senha de novo e o **servidor** confere a credencial antes de gravar; com senha errada nada é gravado. A última decisão vale, e a situação aparece na lista, no documento e na ficha do servidor (aba Consulta).
 

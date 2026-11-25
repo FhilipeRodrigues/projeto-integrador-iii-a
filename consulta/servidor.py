@@ -26,6 +26,7 @@ TIMEOUT_S = 5
 TAMANHO_MAXIMO_NOME = 100
 ATRASO_FALHA_S = 1.0
 MENSAGEM_CREDENCIAIS = "Usuário ou senha inválidos."
+MENSAGEM_CONTA_JA_EXISTE = "Já existe uma conta cadastrada. Entre com ela."
 
 MENSAGEM_SEM_CERTIFICADOS = (
     "Certificados do servidor não encontrados ou inválidos em '{pasta}'. "
@@ -156,6 +157,7 @@ class Servidor:
             "decidir": self._decidir,
             "regras": self._regras,
             "login": self._login,
+            "criar_conta": self._criar_conta,
         }.get(operacao)
         if tratar is None:
             raise protocolo.ErroDeAtendimento(protocolo.OPERACAO_DESCONHECIDA, "Operação desconhecida.")
@@ -199,6 +201,21 @@ class Servidor:
     def _login(self, requisicao):
         self._exigir_credenciais(requisicao)
         return {"usuario": self._credenciais.usuario}
+
+    def _criar_conta(self, requisicao):
+        usuario = requisicao.get("usuario")
+        try:
+            self._credenciais.criar(usuario, requisicao.get("senha"))
+        except credenciais.ContaJaExiste as erro:
+            raise protocolo.ErroDeAtendimento(protocolo.CONTA_JA_EXISTE, MENSAGEM_CONTA_JA_EXISTE) from erro
+        except credenciais.DadosDeContaInvalidos as erro:
+            raise _invalida(str(erro)) from erro
+        except OSError as erro:  # o OSError de _responder é o do canal; este é o do arquivo
+            self._log(f"op=criar_conta falha_ao_gravar ({type(erro).__name__})")
+            raise protocolo.ErroDeAtendimento(
+                protocolo.ERRO_INTERNO, "Não foi possível gravar a conta. Tente novamente."
+            ) from erro
+        return {"usuario": usuario}
 
     def _exigir_credenciais(self, requisicao) -> None:
         """Recusa o pedido sem a credencial certa; a pausa na falha freia tentativas em série."""
@@ -258,9 +275,9 @@ def main(argumentos=None) -> int:
     try:
         servidores = base.carregar(BASE_PADRAO)["servidores"]
         pedidos = solicitacoes.Solicitacoes(servidores, opcoes.solicitacoes)
+        conta = credenciais.Credenciais.do_env(opcoes.env)
         servidor = Servidor(
-            servidores, opcoes.certs, opcoes.host, opcoes.porta, pedidos=pedidos,
-            credenciais=credenciais.Credenciais.do_env(opcoes.env),
+            servidores, opcoes.certs, opcoes.host, opcoes.porta, pedidos=pedidos, credenciais=conta,
         )
         servidor.iniciar()
     except (
@@ -269,6 +286,8 @@ def main(argumentos=None) -> int:
     ) as erro:
         print(f"Erro: {erro}", file=sys.stderr)
         return 1
+    if not conta.configurada:
+        print("Ainda não há conta: crie uma pela janela (botão 'Criar conta' no login).", flush=True)
     print(f"Servidor no ar em {opcoes.host}:{servidor.porta} (Ctrl+C para encerrar)", flush=True)
     try:
         servidor.servir()
