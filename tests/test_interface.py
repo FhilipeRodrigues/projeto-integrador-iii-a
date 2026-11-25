@@ -10,10 +10,11 @@ import unittest
 from pathlib import Path
 from tkinter import font as tkfont
 from tkinter import ttk
+from unittest import mock
 
 from consulta import base, cliente, dominio, interface, regras, solicitacoes
 from scripts import gerar_certificados
-from tests.test_integracao_tls import _openssl, servidor_no_ar, servidor_no_ar_em
+from tests.test_integracao_tls import SENHA, USUARIO, _openssl, servidor_no_ar, servidor_no_ar_em
 
 RAIZ = Path(__file__).resolve().parent.parent
 SERVIDORES = base.carregar(RAIZ / "data" / "servidores.json")["servidores"]
@@ -45,7 +46,17 @@ class ClienteFalso:
         servidor = next(s for s in SERVIDORES if s["id"] == pedido["servidor_id"])
         return dominio.montar_documento(servidor, pedido)
 
-    def decidir(self, identificacao, decisao):
+    def login(self, usuario, senha):
+        self._conferir(usuario, senha)
+        return {"usuario": usuario}
+
+    @staticmethod
+    def _conferir(usuario, senha):
+        if (usuario, senha) != (USUARIO, SENHA):
+            raise cliente.CredenciaisInvalidas("Usuário ou senha inválidos.")
+
+    def decidir(self, identificacao, decisao, usuario, senha):
+        self._conferir(usuario, senha)
         pedido = self._pedidos.decidir(identificacao, decisao)
         servidor = next(s for s in SERVIDORES if s["id"] == pedido["servidor_id"])
         return dominio.montar_documento(servidor, pedido)
@@ -73,6 +84,7 @@ def _percorrer(widget):
 
 class JanelaBase(unittest.TestCase):
     cliente_de_rede = ClienteFalso
+    usuario_inicial = USUARIO  # None faz a janela abrir pelo login
 
     def setUp(self):
         try:
@@ -82,7 +94,7 @@ class JanelaBase(unittest.TestCase):
         self.raiz.withdraw()
         self.addCleanup(_destruir, self.raiz)
         self.addCleanup(setattr, self, "janela", None)  # roda antes: solta a janela para o coletor
-        self.janela = interface.JanelaConsulta(self.raiz, self.cliente_de_rede())
+        self.janela = interface.JanelaConsulta(self.raiz, self.cliente_de_rede(), self.usuario_inicial)
         self.esperar()
 
     def esperar(self):
@@ -491,7 +503,10 @@ class ClienteParado(ClienteFalso):
     def documento(self, identificacao):
         raise cliente.ErroDeRede(MSG_PARADO)
 
-    def decidir(self, identificacao, decisao):
+    def login(self, usuario, senha):
+        raise cliente.ErroDeRede(MSG_PARADO)
+
+    def decidir(self, identificacao, decisao, usuario, senha):
         raise cliente.ErroDeRede(MSG_PARADO)
 
     def regras(self):
@@ -542,8 +557,14 @@ class InterfaceDecisaoTest(JanelaBase):
         self.raiz.update()
         self.esperar()
 
-    def decidir(self, botao):
+    def decidir(self, botao, senha=SENHA):
         botao.invoke()
+        self.confirmar(senha)
+
+    def confirmar(self, senha=SENHA):
+        dialogo = self.janela._dialogo
+        dialogo.campo_senha.insert(0, senha)
+        dialogo.confirmar()
         self.esperar()
 
     def texto(self):
@@ -652,6 +673,8 @@ class InterfaceDecisaoTest(JanelaBase):
         self.janela._lista_solicitacoes.selection_set("1")
         self.raiz.update()
         self.janela.decidir("aprovada")
+        self.janela._dialogo.campo_senha.insert(0, SENHA)
+        self.janela._dialogo.confirmar()
         limite = time.monotonic() + 5
         while self.janela._decidindo and time.monotonic() < limite:
             self.raiz.update()
@@ -660,10 +683,139 @@ class InterfaceDecisaoTest(JanelaBase):
         self.esperar()
         self.assertIn("Situação: Aprovada", self.texto())
 
+    def test_Aprovar_pede_a_senha_antes_de_enviar(self):
+        self.selecionar(1)
+        self.janela._botao_aprovar.invoke()
+        self.raiz.update()
+        dialogo = self.janela._dialogo
+        self.assertIsNotNone(dialogo)
+        self.assertEqual(dialogo.campo_usuario.get(), USUARIO)
+        self.assertTrue(dialogo.campo_usuario.instate(["readonly"]))
+        self.assertEqual(str(dialogo.campo_senha.cget("show")), "*")
+        self.assertEqual(self.pedidos.obter(1)["situacao"], "pendente")
+        for botao in (self.janela._botao_aprovar, self.janela._botao_desaprovar):
+            self.assertTrue(botao.instate(["disabled"]))
+        self.confirmar()
+        self.assertIsNone(self.janela._dialogo)
+        self.assertEqual(self.situacao_na_lista(1), "Aprovada")
+        self.assertTrue(self.janela._botao_aprovar.instate(["!disabled"]))
+
+    def test_Desaprovar_tambem_pede_a_senha(self):
+        self.selecionar(1)
+        self.decidir(self.janela._botao_desaprovar)
+        self.assertEqual(self.pedidos.obter(1)["situacao"], "desaprovada")
+
+    def test_Senha_errada_mantem_a_confirmacao_e_nao_grava(self):
+        self.selecionar(1)
+        self.decidir(self.janela._botao_aprovar, senha="errada")
+        dialogo = self.janela._dialogo
+        self.assertIsNotNone(dialogo)
+        self.assertEqual(dialogo.mensagem.get(), "Usuário ou senha inválidos.")
+        self.assertEqual(dialogo.campo_senha.get(), "")
+        self.assertEqual(self.pedidos.obter(1)["situacao"], "pendente")
+        self.assertEqual(self.situacao_na_lista(1), "Pendente")
+        self.assertTrue(dialogo.botao_confirmar.instate(["!disabled"]))
+        self.confirmar()  # tenta de novo, na mesma confirmação, com a senha certa
+        self.assertIsNone(self.janela._dialogo)
+        self.assertEqual(self.pedidos.obter(1)["situacao"], "aprovada")
+
+    def test_Cancelar_a_confirmacao_nao_grava_e_libera_os_botoes(self):
+        self.selecionar(1)
+        self.janela._botao_aprovar.invoke()
+        self.janela._dialogo.cancelar()
+        self.assertIsNone(self.janela._dialogo)
+        self.assertEqual(self.pedidos.obter(1)["situacao"], "pendente")
+        self.assertTrue(self.janela._botao_aprovar.instate(["!disabled"]))
+
+    def test_Com_a_confirmacao_aberta_outro_clique_nao_abre_outra(self):
+        self.selecionar(1)
+        self.janela._botao_aprovar.invoke()
+        primeira = self.janela._dialogo
+        self.janela.decidir("desaprovada")
+        self.assertIs(self.janela._dialogo, primeira)
+
+    def test_Confirmar_sem_senha_nao_chama_o_servidor(self):
+        self.selecionar(1)
+        self.janela._botao_aprovar.invoke()
+        self.janela._dialogo.confirmar()
+        self.assertFalse(self.janela.aguardando())
+        self.assertEqual(self.janela._dialogo.mensagem.get(), interface.INFORME_CREDENCIAIS)
+
     def test_Sem_selecao_decidir_nao_faz_nada(self):
         self.janela.decidir("aprovada")
+        self.assertIsNone(self.janela._dialogo)
         self.esperar()
         self.assertEqual({i["situacao"] for i in self.pedidos.listar()}, {"pendente"})
+
+
+class InterfaceLoginTest(JanelaBase):
+    usuario_inicial = None
+
+    def entrar(self, usuario=USUARIO, senha=SENHA):
+        dialogo = self.janela._dialogo
+        dialogo.campo_usuario.insert(0, usuario)
+        dialogo.campo_senha.insert(0, senha)
+        dialogo.confirmar()
+        self.esperar()
+
+    def test_A_janela_abre_pelo_login_sem_mostrar_dados(self):
+        dialogo = self.janela._dialogo
+        self.assertIsNotNone(dialogo)
+        self.assertEqual(self.raiz.state(), "withdrawn")
+        self.assertEqual(str(dialogo.campo_senha.cget("show")), "*")
+        self.assertEqual(self.linhas(), [])  # nenhuma consulta antes do login
+        rotulos = {w.cget("text") for w in _percorrer(dialogo) if isinstance(w, ttk.Label)}
+        self.assertLessEqual({"Usuário", "Senha"}, rotulos)
+
+    def test_Credencial_certa_mostra_a_janela_com_a_lista(self):
+        self.entrar()
+        self.assertIsNone(self.janela._dialogo)
+        self.assertEqual(self.raiz.state(), "normal")
+        self.assertTrue(self.linhas())
+        self.assertEqual(self.janela._usuario, USUARIO)
+
+    def test_Credencial_errada_fica_no_login_com_a_mesma_mensagem(self):
+        for usuario, senha in (("outro", SENHA), (USUARIO, "errada")):
+            with self.subTest(usuario=usuario):
+                dialogo = self.janela._dialogo
+                dialogo.campo_usuario.delete(0, "end")
+                self.entrar(usuario, senha)
+                self.assertIs(self.janela._dialogo, dialogo)
+                self.assertEqual(dialogo.mensagem.get(), "Usuário ou senha inválidos.")
+                self.assertEqual(dialogo.campo_senha.get(), "")
+                self.assertEqual(self.raiz.state(), "withdrawn")
+                self.assertEqual(self.linhas(), [])
+
+    def test_Campos_vazios_nao_chamam_o_servidor(self):
+        self.janela._dialogo.confirmar()
+        self.assertFalse(self.janela.aguardando())
+        self.assertEqual(self.janela._dialogo.mensagem.get(), interface.INFORME_CREDENCIAIS)
+
+    def test_Cancelar_o_login_encerra_o_programa(self):
+        with mock.patch.object(self.raiz, "destroy") as destruir:
+            self.janela._dialogo.cancelar()
+        destruir.assert_called_once_with()
+
+
+class InterfaceLoginServidorParadoTest(JanelaBase):
+    cliente_de_rede = ClienteParado
+    usuario_inicial = None
+
+    def test_Servidor_fora_do_ar_avisa_no_login_e_deixa_tentar_de_novo(self):
+        dialogo = self.janela._dialogo
+        dialogo.campo_usuario.insert(0, USUARIO)
+        dialogo.campo_senha.insert(0, SENHA)
+        dialogo.confirmar()
+        self.esperar()
+        self.assertIs(self.janela._dialogo, dialogo)
+        self.assertEqual(dialogo.mensagem.get(), MSG_PARADO)
+        self.assertEqual(self.raiz.state(), "withdrawn")
+        self.janela._cliente = ClienteFalso()  # o servidor voltou
+        dialogo.campo_senha.insert(0, SENHA)
+        dialogo.confirmar()
+        self.esperar()
+        self.assertIsNone(self.janela._dialogo)
+        self.assertEqual(self.raiz.state(), "normal")
 
 
 class InterfaceConsultaLentaTest(JanelaBase):
@@ -793,7 +945,7 @@ class InterfaceErrosDeRedeTest(unittest.TestCase):
         raiz.withdraw()
         self.addCleanup(_destruir, raiz)
         rede = cliente.ClienteRede("127.0.0.1", porta, self.certs / "ca.crt")
-        janela = interface.JanelaConsulta(raiz, rede)
+        janela = interface.JanelaConsulta(raiz, rede, USUARIO)
         self.esperar(janela)
         return janela
 
@@ -859,7 +1011,7 @@ class InterfaceErrosDeRedeTest(unittest.TestCase):
 
 class InterfaceIntegracaoTest(unittest.TestCase):
     @contextlib.contextmanager
-    def janela_no_ar(self):
+    def janela_no_ar(self, usuario=USUARIO):
         """Janela real ligada ao servidor real (TLS) com a base fictícia."""
         try:
             raiz = tk.Tk()
@@ -871,7 +1023,7 @@ class InterfaceIntegracaoTest(unittest.TestCase):
             certs = gerar_certificados.gerar_certificados(Path(tmp) / "certs")
             with servidor_no_ar(SERVIDORES, certs) as (srv, _):
                 rede = cliente.ClienteRede("127.0.0.1", srv.porta, certs / "ca.crt")
-                janela = interface.JanelaConsulta(raiz, rede)
+                janela = interface.JanelaConsulta(raiz, rede, usuario)
 
                 def esperar():
                     limite = time.monotonic() + 10
@@ -949,6 +1101,8 @@ class InterfaceIntegracaoTest(unittest.TestCase):
             janela._raiz.update()
             esperar()
             janela._botao_aprovar.invoke()
+            janela._dialogo.campo_senha.insert(0, SENHA)
+            janela._dialogo.confirmar()
             esperar()
             no_servidor = rede.documento(primeira["id"])
             na_lista = janela._lista_solicitacoes.set(str(primeira["id"]), "situacao")
@@ -971,6 +1125,24 @@ class InterfaceIntegracaoTest(unittest.TestCase):
         self.assertEqual((na_lista, na_ficha), ("Aprovada", "Aprovada"))
         data, hora = no_servidor["decidida_em"].split("T")
         self.assertIn(f"Situação: Aprovada em {interface._data_br(data)} às {hora[:5]}", texto)
+
+    @unittest.skipUnless(_openssl(), "openssl não encontrado; veja a mensagem do script")
+    def test_Login_pela_rede_recusa_a_senha_errada_e_aceita_a_certa(self):
+        with self.janela_no_ar(usuario=None) as (janela, rede, esperar):
+            dialogo = janela._dialogo
+            dialogo.campo_usuario.insert(0, USUARIO)
+            dialogo.campo_senha.insert(0, "errada")
+            dialogo.confirmar()
+            esperar()
+            recusado = (dialogo.mensagem.get(), janela._raiz.state(), len(janela._lista.get_children()))
+            dialogo.campo_senha.insert(0, SENHA)
+            dialogo.confirmar()
+            esperar()
+            aceito = (janela._dialogo, janela._raiz.state(), len(janela._lista.get_children()))
+        self.assertEqual(recusado, ("Usuário ou senha inválidos.", "withdrawn", 0))
+        self.assertIsNone(aceito[0])
+        self.assertEqual(aceito[1], "normal")
+        self.assertGreater(aceito[2], 0)
 
 
 if __name__ == "__main__":

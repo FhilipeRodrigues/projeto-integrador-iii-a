@@ -19,6 +19,10 @@ class ErroDeRede(Exception):
     """Falha de comunicação; `str(erro)` é uma mensagem pronta para mostrar ao usuário."""
 
 
+class CredenciaisInvalidas(ErroDeRede):
+    """O servidor recusou o usuário ou a senha."""
+
+
 class ClienteRede:
     def __init__(self, host=HOST_PADRAO, porta=PORTA_PADRAO, ca=CA_PADRAO):
         self._host = host
@@ -80,9 +84,16 @@ class ClienteRede:
         """Dados do requerimento de aposentadoria de uma solicitação."""
         return self._dados({"op": "documento", "id": identificacao})
 
-    def decidir(self, identificacao: int, decisao: str) -> dict:
-        """Registra "aprovada" ou "desaprovada" na solicitação; devolve o documento atualizado."""
-        return self._dados({"op": "decidir", "id": identificacao, "decisao": decisao})
+    def login(self, usuario: str, senha: str) -> dict:
+        """Confere a credencial no servidor; `CredenciaisInvalidas` se for recusada."""
+        return self._dados({"op": "login", "usuario": usuario, "senha": senha})
+
+    def decidir(self, identificacao: int, decisao: str, usuario: str, senha: str) -> dict:
+        """Registra "aprovada" ou "desaprovada" (o servidor confere a credencial); devolve o documento."""
+        return self._dados({
+            "op": "decidir", "id": identificacao, "decisao": decisao,
+            "usuario": usuario, "senha": senha,
+        })
 
     def regras(self) -> list:
         """Blocos de texto (título e linhas) com as regras básicas de aposentadoria."""
@@ -91,6 +102,9 @@ class ClienteRede:
     def _dados(self, requisicao: dict):
         resposta = self.consultar(requisicao)
         if resposta.get("ok") is not True:
+            erro = resposta.get("erro")
+            if isinstance(erro, dict) and erro.get("codigo") == protocolo.CREDENCIAIS_INVALIDAS:
+                raise CredenciaisInvalidas("Usuário ou senha inválidos.")
             raise ErroDeRede("O servidor não atendeu a consulta.")
         return resposta["dados"]
 

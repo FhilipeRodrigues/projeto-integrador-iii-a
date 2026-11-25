@@ -11,10 +11,13 @@ from concurrent import futures
 from pathlib import Path
 from unittest import mock
 
-from consulta import base, cliente, dominio, regras, servidor, solicitacoes
+from consulta import base, cliente, credenciais, dominio, regras, servidor, solicitacoes
 from scripts import gerar_certificados
 
 RAIZ = Path(__file__).resolve().parent.parent
+USUARIO, SENHA = "analista", "senha-de-teste"
+CREDENCIAIS = credenciais.Credenciais(USUARIO, credenciais.gerar_hash(SENHA))
+CRED = {"usuario": USUARIO, "senha": SENHA}
 
 
 def _openssl():
@@ -25,10 +28,13 @@ def _openssl():
 
 
 @contextlib.contextmanager
-def servidor_no_ar_em(servidores, pasta_certs, porta, pedidos=None):
+def servidor_no_ar_em(servidores, pasta_certs, porta, pedidos=None, atraso_falha_s=0):
     """Sobe o servidor na `porta` dada (0 = livre); devolve (servidor, linhas de log)."""
     linhas = []
-    srv = servidor.Servidor(servidores, pasta_certs, "127.0.0.1", porta, log=linhas.append, pedidos=pedidos)
+    srv = servidor.Servidor(
+        servidores, pasta_certs, "127.0.0.1", porta, log=linhas.append, pedidos=pedidos,
+        credenciais=CREDENCIAIS, atraso_falha_s=atraso_falha_s,
+    )
     srv.iniciar()
     fio = threading.Thread(target=srv.servir)
     fio.start()
@@ -39,9 +45,9 @@ def servidor_no_ar_em(servidores, pasta_certs, porta, pedidos=None):
         fio.join(timeout=5)
 
 
-def servidor_no_ar(servidores, pasta_certs, pedidos=None):
+def servidor_no_ar(servidores, pasta_certs, pedidos=None, atraso_falha_s=0):
     """Sobe o servidor numa porta livre; devolve (servidor, linhas de log)."""
-    return servidor_no_ar_em(servidores, pasta_certs, 0, pedidos)
+    return servidor_no_ar_em(servidores, pasta_certs, 0, pedidos, atraso_falha_s)
 
 
 @unittest.skipUnless(_openssl(), "openssl não encontrado; veja a mensagem do script")
@@ -150,13 +156,15 @@ class CanalSeguroTest(unittest.TestCase):
     def test_O_servidor_nao_inicia_sem_os_certificados(self):
         with tempfile.TemporaryDirectory() as vazia:
             with self.assertRaises(servidor.CertificadosAusentes) as contexto:
-                servidor.Servidor(self.servidores, vazia, "127.0.0.1", 0)
+                servidor.Servidor(self.servidores, vazia, "127.0.0.1", 0, credenciais=CREDENCIAIS)
             self.assertIn("gerar_certificados.py", str(contexto.exception))
 
+            env = Path(vazia) / ".env"
+            env.write_text(f"USUARIO={USUARIO}\nSENHA_HASH={credenciais.gerar_hash(SENHA)}\n", encoding="utf-8")
             erro = io.StringIO()
             with contextlib.redirect_stderr(erro):
                 codigo = servidor.main([
-                    "--certs", vazia, "--porta", "0",
+                    "--certs", vazia, "--porta", "0", "--env", str(env),
                     "--solicitacoes", str(Path(vazia) / "solicitacoes.json"),
                 ])
         self.assertEqual(codigo, 1)
@@ -502,8 +510,8 @@ class DecisaoPelaRedeTest(unittest.TestCase):
         with self._no_ar() as (srv, _):
             c = self._cliente(srv)
             primeira, segunda = c.solicitacoes()[:2]
-            aprovada = c.decidir(primeira["id"], "aprovada")
-            desaprovada = c.decidir(segunda["id"], "desaprovada")
+            aprovada = c.decidir(primeira["id"], "aprovada", USUARIO, SENHA)
+            desaprovada = c.decidir(segunda["id"], "desaprovada", USUARIO, SENHA)
             lista = {i["id"]: i["situacao"] for i in c.solicitacoes()}
             relida = c.documento(primeira["id"])
         self.assertEqual(set(aprovada), SolicitacoesPelaRedeTest.CAMPOS_DO_DOCUMENTO)
@@ -517,16 +525,16 @@ class DecisaoPelaRedeTest(unittest.TestCase):
         with self._no_ar() as (srv, _):
             c = self._cliente(srv)
             ident = c.solicitacoes()[0]["id"]
-            c.decidir(ident, "aprovada")
-            trocada = c.decidir(ident, "desaprovada")
+            c.decidir(ident, "aprovada", USUARIO, SENHA)
+            trocada = c.decidir(ident, "desaprovada", USUARIO, SENHA)
         self.assertEqual(trocada["situacao"], "desaprovada")
 
     def test_A_decisao_sobrevive_a_reiniciar_o_servidor(self):
         with self._no_ar() as (srv, _):
             c = self._cliente(srv)
             ids = [i["id"] for i in c.solicitacoes()]
-            c.decidir(ids[0], "aprovada")
-            c.decidir(ids[1], "desaprovada")
+            c.decidir(ids[0], "aprovada", USUARIO, SENHA)
+            c.decidir(ids[1], "desaprovada", USUARIO, SENHA)
         with self._no_ar() as (srv, _):  # outro servidor no ar, mesmo arquivo
             situacoes = [i["situacao"] for i in self._cliente(srv).solicitacoes()]
         self.assertEqual(situacoes, ["aprovada", "desaprovada"] + ["pendente"] * 8)
@@ -541,7 +549,7 @@ class DecisaoPelaRedeTest(unittest.TestCase):
         with servidor_no_ar(self.servidores, self.certs, pedidos) as (srv, _):
             c = self._cliente(srv)
             antes = c.ficha(com_solicitacao)["situacao_solicitacao"]
-            c.decidir(1, "aprovada")
+            c.decidir(1, "aprovada", USUARIO, SENHA)
             depois = c.ficha(com_solicitacao)["situacao_solicitacao"]
             sem = c.ficha(sem_solicitacao)["situacao_solicitacao"]
         self.assertEqual((antes, depois, sem), ("pendente", "aprovada", None))
@@ -549,7 +557,7 @@ class DecisaoPelaRedeTest(unittest.TestCase):
     def test_A_situacao_registra_a_decisao_e_nao_indica_aptidao(self):
         with self._no_ar() as (srv, _):
             c = self._cliente(srv)
-            c.decidir(c.solicitacoes()[0]["id"], "aprovada")
+            c.decidir(c.solicitacoes()[0]["id"], "aprovada", USUARIO, SENHA)
             brutos = [json.dumps(c.documento(i["id"])).lower() for i in c.solicitacoes()]
             situacoes = {i["situacao"] for i in c.solicitacoes()}
         for bruto in brutos:
@@ -562,14 +570,14 @@ class DecisaoPelaRedeTest(unittest.TestCase):
             c = self._cliente(srv)
             ident = c.solicitacoes()[0]["id"]
             for decisao in ("pendente", "APROVADA", "", None, 1, ["aprovada"]):
-                resposta = c.consultar({"op": "decidir", "id": ident, "decisao": decisao})
+                resposta = c.consultar({"op": "decidir", **CRED, "id": ident, "decisao": decisao})
                 self.assertEqual(resposta["erro"]["codigo"], "REQUISICAO_INVALIDA")
             for invalido in ("1", None, 1.5, True):
-                resposta = c.consultar({"op": "decidir", "id": invalido, "decisao": "aprovada"})
+                resposta = c.consultar({"op": "decidir", **CRED, "id": invalido, "decisao": "aprovada"})
                 self.assertEqual(resposta["erro"]["codigo"], "REQUISICAO_INVALIDA")
-            resposta = c.consultar({"op": "decidir", "decisao": "aprovada"})
+            resposta = c.consultar({"op": "decidir", **CRED, "decisao": "aprovada"})
             self.assertEqual(resposta["erro"]["codigo"], "REQUISICAO_INVALIDA")
-            resposta = c.consultar({"op": "decidir", "id": 999, "decisao": "aprovada"})
+            resposta = c.consultar({"op": "decidir", **CRED, "id": 999, "decisao": "aprovada"})
             self.assertEqual(resposta["erro"]["codigo"], "NAO_ENCONTRADO")
             depois = c.solicitacoes()  # o servidor continua atendendo
         self.assertEqual({i["situacao"] for i in depois}, {"pendente"})
@@ -580,7 +588,7 @@ class DecisaoPelaRedeTest(unittest.TestCase):
             ids = [i["id"] for i in c.solicitacoes()]
             with futures.ThreadPoolExecutor(max_workers=len(ids)) as pool:
                 respostas = list(pool.map(
-                    lambda n: c.consultar({"op": "decidir", "id": ids[n],
+                    lambda n: c.consultar({"op": "decidir", **CRED, "id": ids[n],
                                            "decisao": "aprovada" if n % 2 else "desaprovada"}),
                     range(len(ids)),
                 ))
@@ -598,9 +606,9 @@ class DecisaoPelaRedeTest(unittest.TestCase):
             c = self._cliente(srv)
             ident = c.solicitacoes()[0]["id"]
             with mock.patch("consulta.solicitacoes.os.replace", side_effect=OSError("disco cheio")):
-                resposta = c.consultar({"op": "decidir", "id": ident, "decisao": "aprovada"})
+                resposta = c.consultar({"op": "decidir", **CRED, "id": ident, "decisao": "aprovada"})
             depois = c.solicitacoes()[0]["situacao"]
-            de_novo = c.decidir(ident, "aprovada")  # o servidor segue atendendo
+            de_novo = c.decidir(ident, "aprovada", USUARIO, SENHA)  # o servidor segue atendendo
         self.assertEqual(resposta["erro"]["codigo"], "ERRO_INTERNO")
         self.assertNotIn("disco cheio", resposta["erro"]["mensagem"])
         self.assertEqual(depois, "pendente")
@@ -609,7 +617,7 @@ class DecisaoPelaRedeTest(unittest.TestCase):
     def test_O_log_registra_a_decisao_sem_nomes(self):
         with self._no_ar() as (srv, linhas):
             c = self._cliente(srv)
-            c.decidir(c.solicitacoes()[0]["id"], "aprovada")
+            c.decidir(c.solicitacoes()[0]["id"], "aprovada", USUARIO, SENHA)
             limite = time.monotonic() + 5
             while len(linhas) < 2 and time.monotonic() < limite:
                 time.sleep(0.01)
@@ -617,6 +625,118 @@ class DecisaoPelaRedeTest(unittest.TestCase):
         self.assertIn("op=decidir resultado=ok", registro)
         for servidor_da_base in self.servidores:
             self.assertNotIn(servidor_da_base["nome"], registro)
+
+
+@unittest.skipUnless(_openssl(), "openssl não encontrado; veja a mensagem do script")
+class LoginPelaRedeTest(unittest.TestCase):
+    @classmethod
+    def setUpClass(cls):
+        cls._tmp = tempfile.TemporaryDirectory()
+        cls.certs = gerar_certificados.gerar_certificados(Path(cls._tmp.name) / "certs")
+        cls.servidores = base.carregar(RAIZ / "data" / "servidores.json")["servidores"]
+
+    @classmethod
+    def tearDownClass(cls):
+        cls._tmp.cleanup()
+
+    def setUp(self):
+        self._pasta = tempfile.TemporaryDirectory()
+        self.addCleanup(self._pasta.cleanup)
+        self.arquivo = Path(self._pasta.name) / "solicitacoes.json"
+
+    def _no_ar(self, atraso_falha_s=0):
+        pedidos = solicitacoes.Solicitacoes(self.servidores, self.arquivo)
+        return servidor_no_ar(self.servidores, self.certs, pedidos, atraso_falha_s)
+
+    def _cliente(self, srv):
+        return cliente.ClienteRede("127.0.0.1", srv.porta, self.certs / "ca.crt")
+
+    def test_Login_com_a_credencial_certa(self):
+        with self._no_ar() as (srv, _):
+            self.assertEqual(self._cliente(srv).login(USUARIO, SENHA), {"usuario": USUARIO})
+
+    def test_Qualquer_outra_credencial_falha_do_mesmo_jeito(self):
+        with self._no_ar() as (srv, _):
+            c = self._cliente(srv)
+            respostas = [
+                c.consultar({"op": "login", "usuario": usuario, "senha": senha})
+                for usuario, senha in (("outro", SENHA), (USUARIO, "errada"), ("outro", "errada"))
+            ]
+            with self.assertRaises(cliente.CredenciaisInvalidas) as contexto:
+                c.login(USUARIO, "errada")
+        for resposta in respostas:
+            self.assertEqual(resposta, respostas[0])
+            self.assertEqual(resposta["erro"]["codigo"], "CREDENCIAIS_INVALIDAS")
+            self.assertEqual(resposta["erro"]["mensagem"], "Usuário ou senha inválidos.")
+        self.assertEqual(str(contexto.exception), "Usuário ou senha inválidos.")
+
+    def test_Credencial_malformada_e_requisicao_invalida(self):
+        with self._no_ar() as (srv, _):
+            c = self._cliente(srv)
+            pedidos = [
+                {"op": "login"},
+                {"op": "login", "usuario": USUARIO},
+                {"op": "login", "usuario": USUARIO, "senha": 123},
+                {"op": "login", "usuario": None, "senha": SENHA},
+                {"op": "login", "usuario": USUARIO, "senha": ""},
+                {"op": "login", "usuario": USUARIO, "senha": "x" * 101},
+            ]
+            codigos = [c.consultar(pedido)["erro"]["codigo"] for pedido in pedidos]
+            depois = c.login(USUARIO, SENHA)  # o servidor segue atendendo
+        self.assertEqual(set(codigos), {"REQUISICAO_INVALIDA"})
+        self.assertEqual(depois, {"usuario": USUARIO})
+
+    def test_Decidir_sem_a_credencial_certa_nao_grava(self):
+        with self._no_ar() as (srv, _):
+            c = self._cliente(srv)
+            ident = c.solicitacoes()[0]["id"]
+            sem = c.consultar({"op": "decidir", "id": ident, "decisao": "aprovada"})
+            errada = c.consultar({"op": "decidir", "id": ident, "decisao": "aprovada",
+                                  "usuario": USUARIO, "senha": "errada"})
+            with self.assertRaises(cliente.CredenciaisInvalidas):
+                c.decidir(ident, "aprovada", "outro", SENHA)
+            pendente = c.solicitacoes()[0]["situacao"]
+            certa = c.decidir(ident, "aprovada", USUARIO, SENHA)
+        self.assertEqual(sem["erro"]["codigo"], "REQUISICAO_INVALIDA")
+        self.assertEqual(errada["erro"]["codigo"], "CREDENCIAIS_INVALIDAS")
+        self.assertEqual(pendente, "pendente")
+        self.assertEqual(certa["situacao"], "aprovada")
+
+    def test_A_credencial_e_conferida_antes_do_id(self):
+        with self._no_ar() as (srv, _):
+            resposta = self._cliente(srv).consultar({
+                "op": "decidir", "id": 999, "decisao": "aprovada",
+                "usuario": USUARIO, "senha": "errada",
+            })
+        self.assertEqual(resposta["erro"]["codigo"], "CREDENCIAIS_INVALIDAS")
+
+    def test_Cada_falha_espera_a_pausa_e_o_acerto_nao(self):
+        with self._no_ar(atraso_falha_s=0.3) as (srv, _):
+            c = self._cliente(srv)
+            inicio = time.monotonic()
+            with self.assertRaises(cliente.CredenciaisInvalidas):
+                c.login(USUARIO, "errada")
+            falha = time.monotonic() - inicio
+            inicio = time.monotonic()
+            c.login(USUARIO, SENHA)
+            acerto = time.monotonic() - inicio
+        self.assertGreaterEqual(falha, 0.3)
+        self.assertLess(acerto, 0.3)
+
+    def test_O_log_registra_o_resultado_sem_usuario_nem_senha(self):
+        with self._no_ar() as (srv, linhas):
+            c = self._cliente(srv)
+            c.login(USUARIO, SENHA)
+            with self.assertRaises(cliente.CredenciaisInvalidas):
+                c.login(USUARIO, "senha-errada-no-log")
+            limite = time.monotonic() + 5
+            while len(linhas) < 2 and time.monotonic() < limite:
+                time.sleep(0.01)
+        registro = "\n".join(linhas)
+        self.assertIn("op=login resultado=ok", registro)
+        self.assertIn("op=login resultado=erro:CREDENCIAIS_INVALIDAS", registro)
+        for segredo in (USUARIO, SENHA, "senha-errada-no-log"):
+            self.assertNotIn(segredo, registro)
 
 
 @unittest.skipUnless(_openssl(), "openssl não encontrado; veja a mensagem do script")
@@ -646,7 +766,7 @@ class RegrasPelaRedeTest(unittest.TestCase):
         with self._no_ar() as (srv, _):
             c = self._cliente(srv)
             primeira = c.regras()
-            c.decidir(c.solicitacoes()[0]["id"], "aprovada")  # decidir não muda o texto
+            c.decidir(c.solicitacoes()[0]["id"], "aprovada", USUARIO, SENHA)  # decidir não muda o texto
             self.assertEqual(c.regras(), primeira)
 
     def test_Parametros_extras_sao_ignorados(self):

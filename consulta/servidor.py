@@ -1,7 +1,7 @@
 """Servidor TCP com TLS: uma thread por conexão, uma requisição por conexão.
 
 Uso: python -m consulta.servidor [--host 127.0.0.1] [--porta 8443] [--certs certs]
-       [--solicitacoes data/solicitacoes.json]
+       [--solicitacoes data/solicitacoes.json] [--env .env]
 """
 
 import argparse
@@ -9,19 +9,23 @@ import socket
 import ssl
 import sys
 import threading
+import time
 from datetime import datetime
 from pathlib import Path
 
-from consulta import base, dominio, protocolo, regras, solicitacoes
+from consulta import base, credenciais, dominio, protocolo, regras, solicitacoes
 
 RAIZ = Path(__file__).resolve().parent.parent
 PASTA_CERTS_PADRAO = RAIZ / "certs"
 BASE_PADRAO = RAIZ / "data" / "servidores.json"
 SOLICITACOES_PADRAO = RAIZ / "data" / "solicitacoes.json"
+ENV_PADRAO = RAIZ / ".env"
 HOST_PADRAO = "127.0.0.1"
 PORTA_PADRAO = 8443
 TIMEOUT_S = 5
 TAMANHO_MAXIMO_NOME = 100
+ATRASO_FALHA_S = 1.0
+MENSAGEM_CREDENCIAIS = "Usuário ou senha inválidos."
 
 MENSAGEM_SEM_CERTIFICADOS = (
     "Certificados do servidor não encontrados ou inválidos em '{pasta}'. "
@@ -54,8 +58,11 @@ def _registrar(mensagem: str) -> None:
 
 class Servidor:
     def __init__(self, servidores, pasta_certs=PASTA_CERTS_PADRAO, host=HOST_PADRAO,
-                 porta=PORTA_PADRAO, log=_registrar, pedidos=None):
+                 porta=PORTA_PADRAO, log=_registrar, pedidos=None, *, credenciais,
+                 atraso_falha_s=ATRASO_FALHA_S):
         self._servidores = servidores
+        self._credenciais = credenciais
+        self._atraso_falha_s = atraso_falha_s
         self._pedidos = pedidos if pedidos is not None else solicitacoes.Solicitacoes(servidores)
         self._contexto = criar_contexto_tls(pasta_certs)
         self._host = host
@@ -148,6 +155,7 @@ class Servidor:
             "documento": self._documento,
             "decidir": self._decidir,
             "regras": self._regras,
+            "login": self._login,
         }.get(operacao)
         if tratar is None:
             raise protocolo.ErroDeAtendimento(protocolo.OPERACAO_DESCONHECIDA, "Operação desconhecida.")
@@ -188,7 +196,24 @@ class Servidor:
         solicitacao = self._pedidos.obter(self._identificacao_da_solicitacao(requisicao))
         return self._documento_de(solicitacao)
 
+    def _login(self, requisicao):
+        self._exigir_credenciais(requisicao)
+        return {"usuario": self._credenciais.usuario}
+
+    def _exigir_credenciais(self, requisicao) -> None:
+        """Recusa o pedido sem a credencial certa; a pausa na falha freia tentativas em série."""
+        usuario, senha = requisicao.get("usuario"), requisicao.get("senha")
+        if not all(
+            isinstance(campo, str) and 0 < len(campo) <= credenciais.TAMANHO_MAXIMO
+            for campo in (usuario, senha)
+        ):
+            raise _invalida("informe usuário e senha (texto de até 100 caracteres).")
+        if not self._credenciais.verificar(usuario, senha):
+            time.sleep(self._atraso_falha_s)
+            raise protocolo.ErroDeAtendimento(protocolo.CREDENCIAIS_INVALIDAS, MENSAGEM_CREDENCIAIS)
+
     def _decidir(self, requisicao):
+        self._exigir_credenciais(requisicao)  # antes do id: quem não entrou não sonda ids
         identificacao = self._identificacao_da_solicitacao(requisicao)
         decisao = requisicao.get("decisao")
         if decisao not in solicitacoes.DECISOES:  # também recusa o que não é texto
@@ -225,14 +250,23 @@ def main(argumentos=None) -> int:
         "--solicitacoes", default=str(SOLICITACOES_PADRAO),
         help="arquivo das solicitações (criado se não existir)",
     )
+    analisador.add_argument(
+        "--env", default=str(ENV_PADRAO), help="arquivo com USUARIO e SENHA_HASH (ver .env.example)"
+    )
     opcoes = analisador.parse_args(argumentos)
 
     try:
         servidores = base.carregar(BASE_PADRAO)["servidores"]
         pedidos = solicitacoes.Solicitacoes(servidores, opcoes.solicitacoes)
-        servidor = Servidor(servidores, opcoes.certs, opcoes.host, opcoes.porta, pedidos=pedidos)
+        servidor = Servidor(
+            servidores, opcoes.certs, opcoes.host, opcoes.porta, pedidos=pedidos,
+            credenciais=credenciais.Credenciais.do_env(opcoes.env),
+        )
         servidor.iniciar()
-    except (base.BaseInvalida, solicitacoes.SolicitacoesInvalidas, CertificadosAusentes, OSError) as erro:
+    except (
+        base.BaseInvalida, solicitacoes.SolicitacoesInvalidas, CertificadosAusentes,
+        credenciais.CredenciaisAusentes, OSError,
+    ) as erro:
         print(f"Erro: {erro}", file=sys.stderr)
         return 1
     print(f"Servidor no ar em {opcoes.host}:{servidor.porta} (Ctrl+C para encerrar)", flush=True)
