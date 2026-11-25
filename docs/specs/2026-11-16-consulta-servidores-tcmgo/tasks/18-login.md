@@ -1,6 +1,6 @@
 ---
 status: feita
-requisitos: [RF-20, RF-21, RNF-08]
+requisitos: [RF-12, RF-20, RF-21, RNF-08]
 depende: ["16", "17"]
 ---
 

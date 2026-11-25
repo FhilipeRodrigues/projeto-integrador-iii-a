@@ -2,7 +2,7 @@
 
 - **Data:** 2026-11-16
 - **PRD:** [prd.md](prd.md)
-- **Status:** aprovado (2026-11-16). **Revisão 2026-11-18** (seção "Revisão 2026-11-18"): aprovada pelo estudante em 2026-11-18. **Revisão 2026-11-24** (seção "Revisão 2026-11-24"): aba Regras, pedida pelo estudante em 2026-11-24.
+- **Status:** aprovado (2026-11-16). **Revisão 2026-11-18** (seção "Revisão 2026-11-18"): aprovada pelo estudante em 2026-11-18. **Revisão 2026-11-24** (seção "Revisão 2026-11-24"): aba Regras, pedida pelo estudante em 2026-11-24. **Revisão 2026-11-25** (seção "Revisão 2026-11-25"): login, pedida e confirmada pelo estudante em 2026-11-25. **Revisão 2026-11-25b** (seção "Revisão 2026-11-25b"): criar conta pela janela, pedida e confirmada pelo estudante em 2026-11-25.
 
 ## Visão geral
 

@@ -21,12 +21,12 @@ PRD: [prd.md](prd.md) · TechSpec: [techspec.md](techspec.md)
 | 15 | [Aba Solicitações na janela](tasks/15-aba-solicitacoes.md) | RF-12, RF-16 | 10, 11, 14 | feita |
 | 16 | [Aprovar ou desaprovar, com situação persistente](tasks/16-aprovar-desaprovar.md) | RF-09, RF-12, RF-17, RF-18, RNF-07 | 14, 15 | feita |
 | 17 | [Aba Regras: consulta das regras de aposentadoria](tasks/17-aba-regras.md) | RF-09, RF-12, RF-19 | 14, 15 | feita |
-| 18 | [Login e reverificação ao decidir](tasks/18-login.md) | RF-20, RF-21, RNF-08 | 16, 17 | feita |
+| 18 | [Login e reverificação ao decidir](tasks/18-login.md) | RF-12, RF-20, RF-21, RNF-08 | 16, 17 | feita |
 | 19 | [Criar conta pela janela](tasks/19-criar-conta.md) | RF-22, RNF-08 | 18 | feita |
 
-**Ordem sugerida de execução:** 01 a 12 (feitas), depois 13, 14, 15, 16 (revisão de 2026-11-18, ver PRD). As tasks 02, 03 e 04 não dependem entre si.
+**Ordem sugerida de execução:** 01 a 12, depois 13 a 16 (revisão de 2026-11-18), 17 (2026-11-24), 18 (2026-11-25) e 19 (2026-11-25b); todas feitas. As tasks 02, 03 e 04 não dependem entre si.
 
-**Cobertura:** todo RF do PRD (RF-01 a RF-14) aparece em pelo menos uma task e em pelo menos um cenário. Os RNF-01 a RNF-06 também.
+**Cobertura:** todo RF do PRD (RF-01 a RF-22) aparece em pelo menos uma task e em pelo menos um cenário. Os RNF-01 a RNF-08 também (ver `check-spec.md`).
 
 ## Comandos de validação do projeto
 
