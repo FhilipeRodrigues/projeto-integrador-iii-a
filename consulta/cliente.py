@@ -23,6 +23,14 @@ class CredenciaisInvalidas(ErroDeRede):
     """O servidor recusou o usuário ou a senha."""
 
 
+class ContaJaExiste(ErroDeRede):
+    """O servidor já tem conta; só se cria uma."""
+
+
+class DadosDeContaInvalidos(ErroDeRede):
+    """O servidor recusou o usuário ou a senha da nova conta; `str(erro)` diz a regra."""
+
+
 class ClienteRede:
     def __init__(self, host=HOST_PADRAO, porta=PORTA_PADRAO, ca=CA_PADRAO):
         self._host = host
@@ -88,6 +96,18 @@ class ClienteRede:
         """Confere a credencial no servidor; `CredenciaisInvalidas` se for recusada."""
         return self._dados({"op": "login", "usuario": usuario, "senha": senha})
 
+    def criar_conta(self, usuario: str, senha: str) -> dict:
+        """Cria a única conta (o servidor grava o hash); `ContaJaExiste` se já houver uma."""
+        resposta = self.consultar({"op": "criar_conta", "usuario": usuario, "senha": senha})
+        erro = resposta.get("erro")
+        if isinstance(erro, dict):
+            if erro.get("codigo") == protocolo.CONTA_JA_EXISTE:
+                raise ContaJaExiste(erro.get("mensagem"))
+            if erro.get("codigo") == protocolo.REQUISICAO_INVALIDA:
+                motivo = str(erro.get("mensagem")).removeprefix("Requisição inválida: ")
+                raise DadosDeContaInvalidos(f"Dados inválidos: {motivo}")
+        return self._dados_da(resposta)
+
     def decidir(self, identificacao: int, decisao: str, usuario: str, senha: str) -> dict:
         """Registra "aprovada" ou "desaprovada" (o servidor confere a credencial); devolve o documento."""
         return self._dados({
@@ -100,7 +120,10 @@ class ClienteRede:
         return self._dados({"op": "regras"})
 
     def _dados(self, requisicao: dict):
-        resposta = self.consultar(requisicao)
+        return self._dados_da(self.consultar(requisicao))
+
+    @staticmethod
+    def _dados_da(resposta: dict):
         if resposta.get("ok") is not True:
             erro = resposta.get("erro")
             if isinstance(erro, dict) and erro.get("codigo") == protocolo.CREDENCIAIS_INVALIDAS:

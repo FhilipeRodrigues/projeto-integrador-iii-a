@@ -46,6 +46,10 @@ RODAPE_DOCUMENTO = "Documento fictício, para demonstração"
 ROTULOS_SITUACAO = {"pendente": "Pendente", "aprovada": "Aprovada", "desaprovada": "Desaprovada"}
 SEM_SOLICITACAO = "Nenhuma solicitação"
 INFORME_CREDENCIAIS = "Informe usuário e senha."
+SENHAS_DIFERENTES = "As senhas não conferem."
+INSTRUCAO_LOGIN = "Informe seu usuário e senha para entrar."
+INSTRUCAO_CONTA_CRIADA = "Conta criada. Entre com ela."
+INSTRUCAO_CRIAR_CONTA = "Escolha o usuário e a senha da sua conta (senha de 4 a 100 caracteres)."
 COR_ERRO = "#a00000"
 
 
@@ -122,15 +126,20 @@ def formatar_documento(dados: dict) -> tuple:
 
 
 class DialogoCredenciais(tk.Toplevel):
-    """Pede usuário e senha (a senha aparece mascarada). Com `usuario_fixo`, o usuário só é exibido."""
+    """Pede usuário e senha (a senha aparece mascarada). Com `usuario_fixo`, o usuário só é exibido.
+
+    `repetir_senha` acrescenta o campo de repetição (criar conta); `ao_criar_conta` acrescenta o
+    botão "Criar conta" (login); `usuario_inicial` só preenche o usuário, que segue editável.
+    """
 
     def __init__(self, pai, titulo, instrucao, rotulo_confirmar, ao_confirmar, ao_cancelar,
-                 usuario_fixo=None):
+                 usuario_fixo=None, *, repetir_senha=False, ao_criar_conta=None, usuario_inicial=None):
         super().__init__(pai)
         self.title(titulo)
         self.resizable(False, False)
         self._ao_confirmar = ao_confirmar
         self._ao_cancelar = ao_cancelar
+        self._ao_criar_conta = ao_criar_conta
         self._ocupado = False
         self.mensagem = tk.StringVar(master=self)
 
@@ -146,23 +155,39 @@ class DialogoCredenciais(tk.Toplevel):
         ttk.Label(quadro, text="Senha").grid(row=2, column=0, sticky="w", pady=4)
         self.campo_senha = ttk.Entry(quadro, width=28, show="*")
         self.campo_senha.grid(row=2, column=1, sticky="ew", padx=(12, 0), pady=4)
+        linha = 3
+        self.campo_repetir = None
+        if repetir_senha:
+            ttk.Label(quadro, text="Repita a senha").grid(row=linha, column=0, sticky="w", pady=4)
+            self.campo_repetir = ttk.Entry(quadro, width=28, show="*")
+            self.campo_repetir.grid(row=linha, column=1, sticky="ew", padx=(12, 0), pady=4)
+            linha += 1
         ttk.Label(quadro, textvariable=self.mensagem, foreground=COR_ERRO, wraplength=380).grid(
-            row=3, column=0, columnspan=2, sticky="w", pady=(4, 0)
+            row=linha, column=0, columnspan=2, sticky="w", pady=(4, 0)
         )
         botoes = ttk.Frame(quadro)
-        botoes.grid(row=4, column=0, columnspan=2, sticky="e", pady=(12, 0))
+        botoes.grid(row=linha + 1, column=0, columnspan=2, sticky="e", pady=(12, 0))
+        coluna = 0
+        self.botao_criar_conta = None
+        if ao_criar_conta is not None:
+            self.botao_criar_conta = ttk.Button(botoes, text="Criar conta", command=self.criar_conta)
+            self.botao_criar_conta.grid(row=0, column=coluna, padx=(0, 12))
+            coluna += 1
         self.botao_confirmar = ttk.Button(botoes, text=rotulo_confirmar, command=self.confirmar)
-        self.botao_confirmar.grid(row=0, column=0, padx=(0, 12))
+        self.botao_confirmar.grid(row=0, column=coluna, padx=(0, 12))
         self.botao_cancelar = ttk.Button(botoes, text="Cancelar", command=self.cancelar)
-        self.botao_cancelar.grid(row=0, column=1)
+        self.botao_cancelar.grid(row=0, column=coluna + 1)
 
         if usuario_fixo is not None:
             self.campo_usuario.insert(0, usuario_fixo)
             self.campo_usuario.state(["readonly"])
+        elif usuario_inicial is not None:
+            self.campo_usuario.insert(0, usuario_inicial)
         self.bind("<Return>", lambda _evento: self.confirmar())
         self.bind("<Escape>", lambda _evento: self.cancelar())
         self.protocol("WM_DELETE_WINDOW", self.cancelar)
-        (self.campo_senha if usuario_fixo is not None else self.campo_usuario).focus_set()
+        com_usuario = usuario_fixo is not None or usuario_inicial is not None
+        (self.campo_senha if com_usuario else self.campo_usuario).focus_set()
 
     def confirmar(self) -> None:
         if self._ocupado:
@@ -170,6 +195,9 @@ class DialogoCredenciais(tk.Toplevel):
         usuario, senha = self.campo_usuario.get(), self.campo_senha.get()
         if not usuario or not senha:
             self.mensagem.set(INFORME_CREDENCIAIS)
+            return
+        if self.campo_repetir is not None and self.campo_repetir.get() != senha:
+            self.mensagem.set(SENHAS_DIFERENTES)
             return
         self.mensagem.set("")
         self._definir_ocupado(True)
@@ -179,16 +207,23 @@ class DialogoCredenciais(tk.Toplevel):
         if not self._ocupado:  # uma consulta em andamento não pode ser desfeita
             self._ao_cancelar()
 
+    def criar_conta(self) -> None:
+        if not self._ocupado:
+            self._ao_criar_conta()
+
     def liberar(self) -> None:
         """A tentativa terminou sem sucesso: limpa a senha e deixa tentar de novo."""
-        self.campo_senha.delete(0, "end")
+        for campo in (self.campo_senha, self.campo_repetir):
+            if campo is not None:
+                campo.delete(0, "end")
         self._definir_ocupado(False)
         self.campo_senha.focus_set()
 
     def _definir_ocupado(self, ocupado: bool) -> None:
         self._ocupado = ocupado
-        for botao in (self.botao_confirmar, self.botao_cancelar):
-            botao.state(["disabled" if ocupado else "!disabled"])
+        for botao in (self.botao_criar_conta, self.botao_confirmar, self.botao_cancelar):
+            if botao is not None:
+                botao.state(["disabled" if ocupado else "!disabled"])
 
 
 class JanelaConsulta:
@@ -536,11 +571,36 @@ class JanelaConsulta:
         )
         self._escrever_documento(*formatar_documento(dados))
 
-    def _pedir_login(self) -> None:
+    def _pedir_login(self, usuario_inicial=None, instrucao=INSTRUCAO_LOGIN) -> None:
         self._dialogo = DialogoCredenciais(
-            self._raiz, "Entrar", "Informe seu usuário e senha para entrar.", "Entrar",
+            self._raiz, "Entrar", instrucao, "Entrar",
             ao_confirmar=self._entrar, ao_cancelar=self._sair,
+            ao_criar_conta=self._pedir_criacao_de_conta, usuario_inicial=usuario_inicial,
         )
+
+    def _pedir_criacao_de_conta(self) -> None:
+        self._dialogo.destroy()
+        self._dialogo = DialogoCredenciais(
+            self._raiz, "Criar conta", INSTRUCAO_CRIAR_CONTA, "Criar conta",
+            ao_confirmar=self._criar_conta, ao_cancelar=self._voltar_ao_login, repetir_senha=True,
+        )
+
+    def _voltar_ao_login(self) -> None:
+        self._dialogo.destroy()
+        self._pedir_login()
+
+    def _criar_conta(self, usuario: str, senha: str) -> None:
+        self._executar(
+            lambda: self._cliente.criar_conta(usuario, senha),
+            lambda _dados, erro: self._concluir_criacao(usuario, erro),
+        )
+
+    def _concluir_criacao(self, usuario, erro) -> None:
+        if erro is not None:
+            self._rejeitar_credencial(erro)  # a tela de criação segue aberta, para corrigir
+            return
+        self._dialogo.destroy()
+        self._pedir_login(usuario, INSTRUCAO_CONTA_CRIADA)
 
     def _sair(self) -> None:
         self._raiz.destroy()

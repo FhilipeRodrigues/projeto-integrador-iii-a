@@ -28,12 +28,12 @@ def _openssl():
 
 
 @contextlib.contextmanager
-def servidor_no_ar_em(servidores, pasta_certs, porta, pedidos=None, atraso_falha_s=0):
+def servidor_no_ar_em(servidores, pasta_certs, porta, pedidos=None, atraso_falha_s=0, conta=None):
     """Sobe o servidor na `porta` dada (0 = livre); devolve (servidor, linhas de log)."""
     linhas = []
     srv = servidor.Servidor(
         servidores, pasta_certs, "127.0.0.1", porta, log=linhas.append, pedidos=pedidos,
-        credenciais=CREDENCIAIS, atraso_falha_s=atraso_falha_s,
+        credenciais=CREDENCIAIS if conta is None else conta, atraso_falha_s=atraso_falha_s,
     )
     srv.iniciar()
     fio = threading.Thread(target=srv.servir)
@@ -45,9 +45,9 @@ def servidor_no_ar_em(servidores, pasta_certs, porta, pedidos=None, atraso_falha
         fio.join(timeout=5)
 
 
-def servidor_no_ar(servidores, pasta_certs, pedidos=None, atraso_falha_s=0):
+def servidor_no_ar(servidores, pasta_certs, pedidos=None, atraso_falha_s=0, conta=None):
     """Sobe o servidor numa porta livre; devolve (servidor, linhas de log)."""
-    return servidor_no_ar_em(servidores, pasta_certs, 0, pedidos, atraso_falha_s)
+    return servidor_no_ar_em(servidores, pasta_certs, 0, pedidos, atraso_falha_s, conta)
 
 
 @unittest.skipUnless(_openssl(), "openssl não encontrado; veja a mensagem do script")
@@ -737,6 +737,122 @@ class LoginPelaRedeTest(unittest.TestCase):
         self.assertIn("op=login resultado=erro:CREDENCIAIS_INVALIDAS", registro)
         for segredo in (USUARIO, SENHA, "senha-errada-no-log"):
             self.assertNotIn(segredo, registro)
+
+
+@unittest.skipUnless(_openssl(), "openssl não encontrado; veja a mensagem do script")
+class CriarContaPelaRedeTest(unittest.TestCase):
+    NOVO_USUARIO, NOVA_SENHA = "ana", "senha-nova-123"
+
+    @classmethod
+    def setUpClass(cls):
+        cls._tmp = tempfile.TemporaryDirectory()
+        cls.certs = gerar_certificados.gerar_certificados(Path(cls._tmp.name) / "certs")
+        cls.servidores = base.carregar(RAIZ / "data" / "servidores.json")["servidores"]
+
+    @classmethod
+    def tearDownClass(cls):
+        cls._tmp.cleanup()
+
+    def setUp(self):
+        self._pasta = tempfile.TemporaryDirectory()
+        self.addCleanup(self._pasta.cleanup)
+        self.env = Path(self._pasta.name) / ".env"
+
+    def _no_ar(self):
+        conta = credenciais.Credenciais.do_env(self.env)
+        pedidos = solicitacoes.Solicitacoes(self.servidores, Path(self._pasta.name) / "solicitacoes.json")
+        return servidor_no_ar(self.servidores, self.certs, pedidos, conta=conta)
+
+    def _cliente(self, srv):
+        return cliente.ClienteRede("127.0.0.1", srv.porta, self.certs / "ca.crt")
+
+    def test_Sem_conta_o_login_falha_como_qualquer_credencial_errada(self):
+        with self._no_ar() as (srv, _):
+            c = self._cliente(srv)
+            sem_conta = c.consultar({"op": "login", **CRED})
+            errada = c.consultar({"op": "login", "usuario": "x", "senha": "y"})
+        self.assertEqual(sem_conta, errada)
+        self.assertEqual(sem_conta["erro"]["codigo"], "CREDENCIAIS_INVALIDAS")
+        self.assertEqual(sem_conta["erro"]["mensagem"], "Usuário ou senha inválidos.")
+
+    def test_Criar_a_conta_grava_o_env_e_libera_o_login(self):
+        with self._no_ar() as (srv, linhas):
+            c = self._cliente(srv)
+            criada = c.criar_conta(self.NOVO_USUARIO, self.NOVA_SENHA)
+            entrou = c.login(self.NOVO_USUARIO, self.NOVA_SENHA)
+            with self.assertRaises(cliente.CredenciaisInvalidas):
+                c.login(self.NOVO_USUARIO, "senha-errada")
+        self.assertEqual(criada, {"usuario": self.NOVO_USUARIO})
+        self.assertEqual(entrou, {"usuario": self.NOVO_USUARIO})
+        gravado = self.env.read_text(encoding="utf-8")
+        self.assertIn(f"USUARIO={self.NOVO_USUARIO}", gravado)
+        self.assertIn("SENHA_HASH=scrypt$", gravado)
+        self.assertNotIn(self.NOVA_SENHA, gravado)
+        registro = "\n".join(linhas)
+        self.assertIn("op=criar_conta resultado=ok", registro)
+        for segredo in (self.NOVO_USUARIO, self.NOVA_SENHA, "scrypt$"):
+            self.assertNotIn(segredo, registro)
+
+    def test_A_conta_sobrevive_ao_reinicio_do_servidor(self):
+        with self._no_ar() as (srv, _):
+            self._cliente(srv).criar_conta(self.NOVO_USUARIO, self.NOVA_SENHA)
+        with self._no_ar() as (srv, _):  # lê o .env gravado
+            self.assertEqual(
+                self._cliente(srv).login(self.NOVO_USUARIO, self.NOVA_SENHA),
+                {"usuario": self.NOVO_USUARIO},
+            )
+
+    def test_So_se_cria_a_conta_uma_vez(self):
+        with self._no_ar() as (srv, _):
+            c = self._cliente(srv)
+            c.criar_conta(self.NOVO_USUARIO, self.NOVA_SENHA)
+            segunda = c.consultar({"op": "criar_conta", "usuario": "outro", "senha": "outra-senha"})
+            with self.assertRaises(cliente.ContaJaExiste) as contexto:
+                c.criar_conta("outro", "outra-senha")
+            original = c.login(self.NOVO_USUARIO, self.NOVA_SENHA)
+            with self.assertRaises(cliente.CredenciaisInvalidas):
+                c.login("outro", "outra-senha")
+        self.assertEqual(segunda["erro"]["codigo"], "CONTA_JA_EXISTE")
+        self.assertEqual(str(contexto.exception), "Já existe uma conta cadastrada. Entre com ela.")
+        self.assertEqual(original, {"usuario": self.NOVO_USUARIO})
+
+    def test_Dados_invalidos_dao_requisicao_invalida_e_nao_gravam(self):
+        with self._no_ar() as (srv, _):
+            c = self._cliente(srv)
+            pedidos = [
+                {"op": "criar_conta"},
+                {"op": "criar_conta", "usuario": "ana"},
+                {"op": "criar_conta", "usuario": "ana", "senha": 123},
+                {"op": "criar_conta", "usuario": None, "senha": self.NOVA_SENHA},
+                {"op": "criar_conta", "usuario": " ana", "senha": self.NOVA_SENHA},
+                {"op": "criar_conta", "usuario": "ana", "senha": "abc"},
+                {"op": "criar_conta", "usuario": "ana", "senha": "x" * 101},
+            ]
+            codigos = [c.consultar(pedido)["erro"]["codigo"] for pedido in pedidos]
+            with self.assertRaises(cliente.DadosDeContaInvalidos) as contexto:
+                c.criar_conta("ana", "abc")
+            c.criar_conta(self.NOVO_USUARIO, self.NOVA_SENHA)  # o servidor segue atendendo
+        self.assertEqual(set(codigos), {"REQUISICAO_INVALIDA"})
+        self.assertEqual(str(contexto.exception), "Dados inválidos: a senha deve ter de 4 a 100 caracteres.")
+
+    def test_Falha_ao_gravar_o_env_vira_erro_interno_e_nao_cria_a_conta(self):
+        with self._no_ar() as (srv, linhas):
+            c = self._cliente(srv)
+            with mock.patch("consulta.credenciais.os.replace", side_effect=PermissionError):
+                resposta = c.consultar({"op": "criar_conta", "usuario": "ana", "senha": self.NOVA_SENHA})
+            with self.assertRaises(cliente.CredenciaisInvalidas):
+                c.login("ana", self.NOVA_SENHA)
+        self.assertEqual(resposta["erro"]["codigo"], "ERRO_INTERNO")
+        self.assertFalse(self.env.exists())
+        self.assertIn("op=criar_conta falha_ao_gravar (PermissionError)", "\n".join(linhas))
+
+    def test_Sem_conta_decidir_e_recusado_e_nada_e_gravado(self):
+        with self._no_ar() as (srv, _):
+            c = self._cliente(srv)
+            ident = c.solicitacoes()[0]["id"]
+            with self.assertRaises(cliente.CredenciaisInvalidas):
+                c.decidir(ident, "aprovada", **{"usuario": USUARIO, "senha": SENHA})
+            self.assertEqual(c.solicitacoes()[0]["situacao"], "pendente")
 
 
 @unittest.skipUnless(_openssl(), "openssl não encontrado; veja a mensagem do script")

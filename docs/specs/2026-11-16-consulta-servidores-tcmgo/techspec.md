@@ -319,6 +319,50 @@ Cobre RF-20, RF-21 e RNF-08. Um usuário só, sem sessão no servidor.
 - `test_integracao_tls.py`: `login` certo e errado (mesma mensagem, código `CREDENCIAIS_INVALIDAS`), `decidir` sem credencial, com senha errada (nada grava) e com a certa; pausa na falha; log sem segredo.
 - `test_interface.py`: login libera a janela, falha mantém o diálogo, Cancelar encerra, senha mascarada; Aprovar e Desaprovar pedem a senha, senha errada não grava.
 
+## Revisão 2026-11-25b: criar conta pela janela
+
+Cobre RF-22 e ajusta RNF-08. Continua um usuário só e sem sessão.
+
+### Componentes tocados
+
+- `consulta/credenciais.py`: `Credenciais` pode nascer sem conta e guarda o caminho do `.env`; novos `configurada`, `criar` e `ContaJaExiste`; `do_env` trata `.env` ausente ou sem valores como "sem conta".
+- `consulta/protocolo.py`: código `CONTA_JA_EXISTE`.
+- `consulta/servidor.py`: operação `criar_conta`; `main` deixa de recusar subir sem `.env` (avisa que não há conta).
+- `consulta/cliente.py`: `criar_conta` e `ContaJaExiste(ErroDeRede)`.
+- `consulta/interface.py`: `DialogoCredenciais` ganha o campo de repetir a senha e o botão "Criar conta"; fluxo login, criar, login.
+- `README.md` e `.env.example`: o `.env` passa a ser criado pela janela, com o caminho manual como alternativa.
+
+### Contratos de API (novos)
+
+| `op` | Entrada | Resposta de sucesso |
+|---|---|---|
+| `criar_conta` | `usuario` e `senha` | `{"usuario": nome}` |
+
+- Já existe conta: `CONTA_JA_EXISTE` ("Já existe uma conta cadastrada. Entre com ela."). Campo ausente, que não é texto ou fora das regras (RF-22): `REQUISICAO_INVALIDA`. Falha ao gravar o `.env`: `ERRO_INTERNO` genérico, e a conta não é ativada.
+- O log registra só `op=criar_conta resultado=ok` ou `erro:<código>`; nunca usuário, senha ou hash.
+- Sem conta, `login` e `decidir` dão `CREDENCIAIS_INVALIDAS`, como qualquer credencial errada.
+
+### Decisões
+
+- **O servidor gera o hash e grava o `.env`** (a janela só envia a senha pelo TLS, como no login). O hash não pode ser gerado na janela: ela não é dona do arquivo.
+- **Só cria quando não há conta.** Sem essa guarda, qualquer cliente trocaria a senha sem saber a antiga. É a proteção mínima; troca de senha segue fora de escopo. Refazer a demonstração: parar o servidor, apagar `.env` (e `data/solicitacoes.json`) e subir de novo.
+- **Gravação atômica** (arquivo temporário e `os.replace`) e **trava** na criação, para duas criações simultâneas não gerarem arquivo pela metade nem duas contas. A conta só vale na memória depois que o arquivo foi gravado.
+- **`.env` com hash malformado continua recusado** (`CredenciaisAusentes`): criar conta por cima de um arquivo corrompido apagaria a configuração sem aviso. Arquivo ausente ou chaves vazias (cópia do `.env.example` sem preencher) valem como "sem conta".
+- **Mesma classe, sem segundo repositório de contas.** `Credenciais` já é dona do `.env`; ganhar `criar` evita um módulo novo.
+- **Regras da conta no servidor** (trust boundary); a janela repete a checagem só para dar mensagem imediata.
+
+### Riscos
+
+- **Quem alcançar o servidor antes do analista cria a conta.** Aceito: o servidor roda local (127.0.0.1) e a criação acontece uma vez, na demonstração. Registrar como limitação no relatório.
+- **Testes que dependiam de o servidor recusar subir sem `.env`** mudam de comportamento: o teste passa a cobrir "sobe sem conta" e "recusa `.env` corrompido".
+- **`.env` já existente da máquina do estudante** impede a demonstração de criação: apagar antes (README).
+
+### Estratégia de teste
+
+- `test_credenciais.py`: criar grava o `.env` com hash (sem a senha) e ativa a conta; segunda criação recusada; regras de usuário e senha; `.env` ausente ou vazio vira "sem conta" e malformado é recusado; falha ao gravar não ativa a conta; `verificar` sem conta devolve falso.
+- `test_integracao_tls.py`: servidor sem conta: login falha; `criar_conta` cria e o login passa a funcionar; segunda criação dá `CONTA_JA_EXISTE`; dados inválidos dão `REQUISICAO_INVALIDA`; o log não traz segredo; o `.env` gravado é aceito por um novo servidor.
+- `test_interface.py`: "Criar conta" abre a tela; senhas diferentes e regras barram antes da rede; criada a conta volta ao login com o usuário; cancelar volta ao login; conta já existente mostra a mensagem.
+
 ## Rastreio
 
 | RF | Componentes | Como testar |
@@ -354,4 +398,5 @@ Cobre RF-20, RF-21 e RNF-08. Um usuário só, sem sessão no servidor.
 | RF-19 | `regras.py`, operação `regras`, aba "Regras" | `test_regras.py`; integração da operação; teste da janela com as três abas |
 | RF-20 | `credenciais.py`, operação `login`, diálogo de login em `interface.py` | integração com credencial certa e errada; teste da janela: libera, falha, cancela, senha mascarada |
 | RF-21 | operação `decidir` autenticada, diálogo de confirmação | integração: sem senha, senha errada (não grava) e certa; teste da janela: Aprovar e Desaprovar pedem a senha |
-| RNF-08 | `credenciais.py`, `scripts/gerar_hash.py`, `.gitignore`, `.env.example` | teste do hash; `git check-ignore .env`; teste de que o log não traz usuário nem senha |
+| RNF-08 | `credenciais.py`, `scripts/gerar_hash.py`, `.gitignore`, `.env.example` | teste do hash; `git check-ignore .env`; teste de que o log não traz usuário nem senha; gravação do `.env` atômica |
+| RF-22 | `credenciais.criar`, operação `criar_conta`, `DialogoCredenciais` com repetição da senha e botão "Criar conta" | integração: cria, recusa a segunda, dados inválidos, login depois; teste da janela: fluxo login, criar, login |
