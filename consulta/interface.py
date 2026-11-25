@@ -45,6 +45,8 @@ SELECIONE_SOLICITACAO = "Selecione uma solicitação da lista para ver o documen
 RODAPE_DOCUMENTO = "Documento fictício, para demonstração"
 ROTULOS_SITUACAO = {"pendente": "Pendente", "aprovada": "Aprovada", "desaprovada": "Desaprovada"}
 SEM_SOLICITACAO = "Nenhuma solicitação"
+INFORME_CREDENCIAIS = "Informe usuário e senha."
+COR_ERRO = "#a00000"
 
 
 def _data_br(iso: str) -> str:
@@ -119,8 +121,80 @@ def formatar_documento(dados: dict) -> tuple:
     )
 
 
+class DialogoCredenciais(tk.Toplevel):
+    """Pede usuário e senha (a senha aparece mascarada). Com `usuario_fixo`, o usuário só é exibido."""
+
+    def __init__(self, pai, titulo, instrucao, rotulo_confirmar, ao_confirmar, ao_cancelar,
+                 usuario_fixo=None):
+        super().__init__(pai)
+        self.title(titulo)
+        self.resizable(False, False)
+        self._ao_confirmar = ao_confirmar
+        self._ao_cancelar = ao_cancelar
+        self._ocupado = False
+        self.mensagem = tk.StringVar(master=self)
+
+        quadro = ttk.Frame(self, padding=16)
+        quadro.grid(sticky="nsew")
+        quadro.columnconfigure(1, weight=1)
+        ttk.Label(quadro, text=instrucao, wraplength=380).grid(
+            row=0, column=0, columnspan=2, sticky="w", pady=(0, 12)
+        )
+        ttk.Label(quadro, text="Usuário").grid(row=1, column=0, sticky="w", pady=4)
+        self.campo_usuario = ttk.Entry(quadro, width=28)
+        self.campo_usuario.grid(row=1, column=1, sticky="ew", padx=(12, 0), pady=4)
+        ttk.Label(quadro, text="Senha").grid(row=2, column=0, sticky="w", pady=4)
+        self.campo_senha = ttk.Entry(quadro, width=28, show="*")
+        self.campo_senha.grid(row=2, column=1, sticky="ew", padx=(12, 0), pady=4)
+        ttk.Label(quadro, textvariable=self.mensagem, foreground=COR_ERRO, wraplength=380).grid(
+            row=3, column=0, columnspan=2, sticky="w", pady=(4, 0)
+        )
+        botoes = ttk.Frame(quadro)
+        botoes.grid(row=4, column=0, columnspan=2, sticky="e", pady=(12, 0))
+        self.botao_confirmar = ttk.Button(botoes, text=rotulo_confirmar, command=self.confirmar)
+        self.botao_confirmar.grid(row=0, column=0, padx=(0, 12))
+        self.botao_cancelar = ttk.Button(botoes, text="Cancelar", command=self.cancelar)
+        self.botao_cancelar.grid(row=0, column=1)
+
+        if usuario_fixo is not None:
+            self.campo_usuario.insert(0, usuario_fixo)
+            self.campo_usuario.state(["readonly"])
+        self.bind("<Return>", lambda _evento: self.confirmar())
+        self.bind("<Escape>", lambda _evento: self.cancelar())
+        self.protocol("WM_DELETE_WINDOW", self.cancelar)
+        (self.campo_senha if usuario_fixo is not None else self.campo_usuario).focus_set()
+
+    def confirmar(self) -> None:
+        if self._ocupado:
+            return
+        usuario, senha = self.campo_usuario.get(), self.campo_senha.get()
+        if not usuario or not senha:
+            self.mensagem.set(INFORME_CREDENCIAIS)
+            return
+        self.mensagem.set("")
+        self._definir_ocupado(True)
+        self._ao_confirmar(usuario, senha)
+
+    def cancelar(self) -> None:
+        if not self._ocupado:  # uma consulta em andamento não pode ser desfeita
+            self._ao_cancelar()
+
+    def liberar(self) -> None:
+        """A tentativa terminou sem sucesso: limpa a senha e deixa tentar de novo."""
+        self.campo_senha.delete(0, "end")
+        self._definir_ocupado(False)
+        self.campo_senha.focus_set()
+
+    def _definir_ocupado(self, ocupado: bool) -> None:
+        self._ocupado = ocupado
+        for botao in (self.botao_confirmar, self.botao_cancelar):
+            botao.state(["disabled" if ocupado else "!disabled"])
+
+
 class JanelaConsulta:
-    def __init__(self, raiz: tk.Tk, cliente_rede):
+    """Sem `usuario`, a janela fica oculta até o login ser aceito pelo servidor."""
+
+    def __init__(self, raiz: tk.Tk, cliente_rede, usuario=None):
         self._raiz = raiz
         self._cliente = cliente_rede
         self._fila = queue.Queue()
@@ -130,6 +204,8 @@ class JanelaConsulta:
         self._lista_atual = 0
         self._documento_atual = 0
         self._decidindo = False
+        self._usuario = usuario
+        self._dialogo = None
         self._regras_atual = 0
         self._regras_carregadas = False
         self._municipios_carregados = False
@@ -140,7 +216,11 @@ class JanelaConsulta:
         self._montar()
         self._agendamento = raiz.after(INTERVALO_FILA_MS, self._drenar_fila)
         raiz.bind("<Destroy>", self._ao_destruir)
-        self.buscar()  # nome vazio e todos os municípios: a lista já abre cheia; carrega o filtro junto
+        if usuario is None:
+            raiz.withdraw()
+            self._pedir_login()
+        else:
+            self.buscar()  # nome vazio e todos os municípios: a lista já abre cheia; carrega o filtro junto
 
     def aguardando(self) -> bool:
         """Há consulta de rede em andamento ou resultado ainda não aplicado à janela."""
@@ -456,18 +536,71 @@ class JanelaConsulta:
         )
         self._escrever_documento(*formatar_documento(dados))
 
+    def _pedir_login(self) -> None:
+        self._dialogo = DialogoCredenciais(
+            self._raiz, "Entrar", "Informe seu usuário e senha para entrar.", "Entrar",
+            ao_confirmar=self._entrar, ao_cancelar=self._sair,
+        )
+
+    def _sair(self) -> None:
+        self._raiz.destroy()
+
+    def _entrar(self, usuario: str, senha: str) -> None:
+        self._executar(
+            lambda: self._cliente.login(usuario, senha),
+            lambda _dados, erro: self._concluir_login(usuario, erro),
+        )
+
+    def _concluir_login(self, usuario, erro) -> None:
+        if erro is not None:
+            self._rejeitar_credencial(erro)
+            return
+        self._usuario = usuario
+        self._fechar_dialogo()
+        self._raiz.deiconify()
+        self.buscar()
+
     def decidir(self, decisao: str) -> None:
-        """Aprova ou desaprova a solicitação selecionada; a última decisão vale."""
+        """Pede a senha de novo; o servidor a confere e então aprova ou desaprova (a última vale)."""
         selecionadas = self._lista_solicitacoes.selection()
-        if not selecionadas or self._decidindo:
+        if not selecionadas or self._decidindo or self._dialogo is not None:
             return
         identificacao = int(selecionadas[0])
-        self._decidindo = True
-        self._atualizar_botoes()
-        self._executar(
-            lambda: self._cliente.decidir(identificacao, decisao),
-            self._mostrar_decisao,
+        verbo = "aprovar" if decisao == "aprovada" else "desaprovar"
+        self._dialogo = DialogoCredenciais(
+            self._raiz, "Confirmar senha", f"Confirme sua senha para {verbo} a solicitação.",
+            "Confirmar",
+            ao_confirmar=lambda usuario, senha: self._confirmar_decisao(
+                identificacao, decisao, usuario, senha
+            ),
+            ao_cancelar=self._fechar_dialogo, usuario_fixo=self._usuario,
         )
+        self._dialogo.transient(self._raiz)
+        self._atualizar_botoes()
+
+    def _confirmar_decisao(self, identificacao, decisao, usuario, senha) -> None:
+        self._decidindo = True
+        self._executar(
+            lambda: self._cliente.decidir(identificacao, decisao, usuario, senha),
+            self._concluir_decisao,
+        )
+
+    def _concluir_decisao(self, documento, erro) -> None:
+        if isinstance(erro, rede.CredenciaisInvalidas):
+            self._decidindo = False
+            self._rejeitar_credencial(erro)  # a confirmação segue aberta, para tentar de novo
+            return
+        self._fechar_dialogo()
+        self._mostrar_decisao(documento, erro)
+
+    def _rejeitar_credencial(self, erro) -> None:
+        self._mostrar_erro(erro, self._dialogo.mensagem)
+        self._dialogo.liberar()
+
+    def _fechar_dialogo(self) -> None:
+        self._dialogo.destroy()
+        self._dialogo = None
+        self._atualizar_botoes()
 
     def _mostrar_decisao(self, documento, erro) -> None:
         self._decidindo = False
@@ -488,7 +621,11 @@ class JanelaConsulta:
         )
 
     def _atualizar_botoes(self) -> None:
-        pronto = bool(self._lista_solicitacoes.selection()) and not self._decidindo
+        pronto = (
+            bool(self._lista_solicitacoes.selection())
+            and not self._decidindo
+            and self._dialogo is None
+        )
         for botao in (self._botao_aprovar, self._botao_desaprovar):
             botao.state(["!disabled" if pronto else "disabled"])
 

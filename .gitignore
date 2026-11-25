@@ -11,6 +11,9 @@ dados-pessoais.local.md
 __pycache__/
 *.pyc
 
+# Credencial de login (usuário e hash da senha); o modelo é o .env.example
+.env
+
 # Chaves privadas da CA e do servidor (geradas localmente)
 *.key
 *.pem

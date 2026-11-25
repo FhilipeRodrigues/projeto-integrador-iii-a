@@ -50,7 +50,7 @@ O vídeo precisa mostrar a **aplicação, as funcionalidades e a comunicação c
 **Na tela:** T1 com o servidor no ar (`python -m consulta.servidor`) e a janela (`python -m consulta.interface`).
 
 **Roteiro de cliques (rápido):**
-1. Buscar `antonia` (sem acento): acha "Antônia". Abrir a ficha e apontar idade e tempo de contribuição ("calculados no **servidor**, o cliente só apresenta").
+1. A janela **já abre com os 50 servidores listados** ("50 servidor(es) encontrado(s)"), sem clicar em nada. Depois buscar `antonia` (sem acento): acha "Antônia". Abrir a ficha e apontar idade e tempo de contribuição ("calculados no **servidor**, o cliente só apresenta").
 2. Aba **Solicitações**: lista de 10, documento formal, **Aprovar** em uma e **Desaprovar** em outra. A situação muda na lista e no documento.
 3. Voltar à aba Consulta, abrir a ficha de um servidor decidido: campo "Situação da solicitação".
 4. Aba **Regras**: regra geral, PCD (por tempo e por idade) e doença profissional. "O texto vem do **servidor**; a aba só consulta. O sistema **não diz** se o servidor pode se aposentar: quem decide é o analista."
