@@ -1,7 +1,7 @@
 # PRD: Consulta de servidores municipais para apoio à análise de aposentadoria (TCM-GO)
 
 - **Data:** 2026-11-16
-- **Status:** aprovado (2026-11-16). **Revisão 2026-11-18** (RF-01 alterado, RF-02 e RF-09 ajustados, RF-15 a RF-18 e RNF-07 novos): aprovada pelo estudante em 2026-11-18. **Revisão 2026-11-24** (RF-19 novo, aba "Regras"): pedida e escopo confirmado pelo estudante em 2026-11-24. **Revisão 2026-11-25** (RF-20 e RF-21 novos, RNF-08 novo, login): pedida e confirmada pelo estudante em 2026-11-25.
+- **Status:** aprovado (2026-11-16). **Revisão 2026-11-18** (RF-01 alterado, RF-02 e RF-09 ajustados, RF-15 a RF-18 e RNF-07 novos): aprovada pelo estudante em 2026-11-18. **Revisão 2026-11-24** (RF-19 novo, aba "Regras"): pedida e escopo confirmado pelo estudante em 2026-11-24. **Revisão 2026-11-25** (RF-20 e RF-21 novos, RNF-08 novo, login): pedida e confirmada pelo estudante em 2026-11-25. **Revisão 2026-11-25b** (RF-22 novo, criar conta pela janela; RNF-08 ajustado): pedida e confirmada pelo estudante em 2026-11-25.
 
 ## Problema
 Na Secretaria de Atos de Pessoal do TCM-GO, a análise de aposentadorias exige consultar a situação funcional de servidores de vários municípios (idade, tempo de serviço, órgão, remuneração e condições especiais). Hoje essa consulta depende de procurar as informações em fontes separadas, o que é lento e sujeito a erro. A proposta do Projeto Integrador III-A pede um protótipo de consulta de informações em arquitetura cliente-servidor, com comunicação protegida, validado com um representante da instituição (Juliana, chefe direta do estudante).
@@ -27,6 +27,7 @@ O protótipo usa uma base **fictícia** (10 municípios, cerca de 50 servidores)
 - Como analista, quero abrir o requerimento de aposentadoria de um servidor, conferir os dados dele na consulta e então aprová-lo ou desaprová-lo, e ver essa decisão registrada mesmo depois de reiniciar o sistema. (RF-15 a RF-18)
 - Como analista, quero consultar as regras básicas de aposentadoria numa aba da própria janela, para decidir se aprovo ou desaprovo sem sair do sistema. (RF-19)
 - Como analista, quero entrar no sistema com meu usuário e senha e confirmar a senha ao aprovar ou desaprovar, para que só quem é autorizado registre decisões. (RF-20, RF-21)
+- Como analista, quero criar minha conta pela própria janela, sem usar o terminal, para começar a usar o sistema e demonstrá-lo com facilidade. (RF-22)
 - Como estudante, quero cumprir as etapas de documentos, demonstração e entregas no prazo. (RP-01 a RP-06)
 
 ## Requisitos funcionais
@@ -52,6 +53,7 @@ O protótipo usa uma base **fictícia** (10 municípios, cerca de 50 servidores)
 - **RF-19:** O cliente deve ter uma aba "Regras", depois da aba "Solicitações", com o texto das regras básicas de aposentadoria do servidor público, para o analista consultar ao aprovar ou desaprovar: **regra geral** (idade mínima de 62 anos para mulher e 65 para homem; contribuição mínima de 25 anos para ambos), **PCD por tempo de contribuição** (25 anos para homem e 20 para mulher), **PCD por idade** (60 anos para homem e 55 para mulher, com 15 anos de contribuição) e **doença profissional ou acidente de trabalho** (em caso positivo, aprovação direta). O texto vem do servidor (operação `regras`), é fixo e simplificado, serve de apoio à demonstração e não substitui a legislação. A aba só apresenta o texto: não calcula nem indica se um servidor atende (RF-09 continua valendo).
 - **RF-20:** Ao abrir, a janela deve pedir usuário e senha antes de mostrar qualquer dado. Há um único usuário autorizado, definido na configuração do servidor (RNF-08). Usuário ou senha incorretos recusam a entrada com uma mensagem única ("Usuário ou senha inválidos."), sem dizer qual dos dois errou, e cada tentativa errada sofre uma pausa de 1 segundo no servidor. A senha aparece mascarada na digitação. Cancelar o login encerra o programa.
 - **RF-21:** Ao clicar em "Aprovar" ou "Desaprovar", a janela deve pedir a senha de novo, e o **servidor** valida usuário e senha antes de gravar a decisão (RF-17). Senha incorreta não grava nada e mantém a janela de confirmação aberta com a mensagem; não há sessão guardada no servidor. As consultas (busca, ficha, solicitações, documento, regras) não exigem credencial no servidor, só a janela exige o login.
+- **RF-22:** Na tela de login, o botão "Criar conta" abre uma tela com usuário, senha e repetição da senha. A janela confere que as duas senhas são iguais; o **servidor** confere as regras (usuário de 1 a 100 caracteres, imprimíveis e sem espaço nas pontas; senha de 4 a 100 caracteres), gera o hash e grava a conta no `.env` (RNF-08). Só é possível criar a conta enquanto não existe uma: com conta já criada, o servidor recusa. Sem conta, o login falha como qualquer credencial errada. Criada a conta, a janela volta ao login com o usuário preenchido. Cancelar a criação volta ao login.
 
 ## Requisitos não funcionais
 - **RNF-01 (dados):** A base e a interface não devem conter dados reais de pessoas ou do TCM-GO. A interface deve indicar que os dados são fictícios.
@@ -60,7 +62,7 @@ O protótipo usa uma base **fictícia** (10 municípios, cerca de 50 servidores)
 - **RNF-04 (execução):** O sistema deve rodar em ambiente local, sem hospedagem e sem banco de dados, e ser executado a partir das instruções do README, sem instalar bibliotecas externas além da própria linguagem.
 - **RNF-05 (vídeo):** A interface deve ser legível em gravação de tela, com fonte de pelo menos 12 pt.
 - **RNF-06 (reprodutibilidade):** Os certificados devem poder ser gerados novamente por script, seguindo o README.
-- **RNF-08 (credencial):** O usuário e o **hash** da senha (scrypt com sal, nunca a senha) ficam no arquivo `.env`, que não é versionado; o repositório traz só o `.env.example`, sem valores. A senha só trafega pelo canal TLS (RF-14), é comparada em tempo constante e nunca vai para o log. O servidor recusa subir sem o `.env` válido, com mensagem de como criá-lo.
+- **RNF-08 (credencial):** O usuário e o **hash** da senha (scrypt com sal, nunca a senha) ficam no arquivo `.env`, que não é versionado; o repositório traz só o `.env.example`, sem valores. A senha só trafega pelo canal TLS (RF-14), é comparada em tempo constante e nunca vai para o log. O servidor sobe sem `.env` (sem conta) e o grava ao criar a conta (RF-22), de forma que o arquivo nunca fique pela metade; um `.env` com hash preenchido mas malformado faz o servidor recusar subir, com mensagem de como corrigir. A conta também pode ser criada à mão com `scripts/gerar_hash.py`.
 - **RNF-07 (integridade do arquivo):** A gravação de `data/solicitacoes.json` não pode deixá-lo corrompido nem permitir que duas decisões simultâneas se percam. O arquivo não é versionado (é estado da execução); o servidor o cria sozinho se não existir e recusa subir se ele estiver inválido.
 
 ## Requisitos de processo
@@ -72,7 +74,7 @@ O protótipo usa uma base **fictícia** (10 municípios, cerca de 50 servidores)
 - **RP-06:** Relatório, código e documentos devem ser enviados no campo "Entregáveis do PI", e o vídeo no campo "Vídeo de Apresentação do PI", até 07/12/2026, 23h59.
 
 ## Fora de escopo
-- Perfis, vários usuários, cadastro ou troca de senha e sessão com token (melhoria futura). Há um único usuário, definido no `.env` (RF-20).
+- Perfis, vários usuários, troca ou recuperação de senha e sessão com token (melhoria futura). Há um único usuário, no `.env` (RF-20), e a conta só pode ser criada uma vez, pela janela (RF-22).
 - Indicação de elegibilidade à aposentadoria ou qualquer regra previdenciária.
 - Banco de dados, hospedagem e implantação definitiva na infraestrutura do TCM-GO.
 - Cadastro, edição ou exclusão de servidores pelo cliente. A base de servidores é somente leitura; o cliente só registra a decisão das solicitações (RF-17).
