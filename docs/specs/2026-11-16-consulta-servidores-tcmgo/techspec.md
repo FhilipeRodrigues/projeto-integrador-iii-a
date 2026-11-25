@@ -273,6 +273,52 @@ Cobre o RF-19. Revisão pequena: uma operação sem parâmetros e uma aba só de
 - `test_integracao_tls.py`: a operação `regras` pelo canal TLS e no log.
 - `test_interface.py`: três abas na ordem, texto exibido e somente leitura, fonte mínima, rodapé, falha de rede com nova tentativa.
 
+## Revisão 2026-11-25: login e reverificação ao decidir
+
+Cobre RF-20, RF-21 e RNF-08. Um usuário só, sem sessão no servidor.
+
+### Componentes tocados
+
+- `consulta/credenciais.py` (novo, só o servidor usa): `carregar_env`, `gerar_hash` e `Credenciais.verificar`.
+- `scripts/gerar_hash.py` (novo): pede a senha sem eco (`getpass`) e imprime a linha `SENHA_HASH=...` para o `.env`.
+- `consulta/protocolo.py`: código `CREDENCIAIS_INVALIDAS`.
+- `consulta/servidor.py`: operação `login`; `decidir` passa a exigir `usuario` e `senha`; opção `--env`; recusa subir sem `.env` válido.
+- `consulta/cliente.py`: `login`, `decidir` com credencial e `CredenciaisInvalidas(ErroDeRede)`.
+- `consulta/interface.py`: diálogo de credenciais (login e confirmação), com senha mascarada; `JanelaConsulta(raiz, cliente, usuario=None)`.
+- `.gitignore` (`.env`), `.env.example`, `README.md`.
+
+### Contratos de API (novos e alterados)
+
+| `op` | Entrada | Resposta de sucesso |
+|---|---|---|
+| `login` (novo) | `usuario` e `senha` (textos de até 100 caracteres) | `{"usuario": nome}` |
+| `decidir` (alterado) | `id`, `decisao`, **`usuario`, `senha`** | documento atualizado, como antes |
+
+- Credencial errada, de qualquer tipo, dá `CREDENCIAIS_INVALIDAS` com a mesma mensagem ("Usuário ou senha inválidos."), depois de 1 s de pausa. Campo ausente ou que não é texto, ou maior que 100 caracteres, dá `REQUISICAO_INVALIDA`.
+- A credencial é conferida **antes** de id e decisão: quem não se autentica não descobre se um id existe.
+- O log registra `op=login resultado=ok` ou `erro:CREDENCIAIS_INVALIDAS`, sem usuário nem senha.
+
+### Decisões
+
+- **Hash scrypt da biblioteca padrão** (`hashlib.scrypt`, n=2^14, r=8, p=1, sal de 16 bytes), no formato `scrypt$<sal hex>$<hash hex>`. Sem dependência nova (RNF-04). Texto puro no `.env` foi descartado por entregar a senha a quem lê o arquivo; desafio e resposta, porque o TLS já protege o trânsito.
+- **Comparação em tempo constante e sempre com scrypt**, mesmo com usuário errado, para o tempo de resposta não revelar se o usuário existe.
+- **Sem sessão.** O login ao abrir só libera a janela; cada decisão carrega a credencial e o servidor valida de novo. Não há token para vazar ou expirar.
+- **Pausa de 1 s na falha** (`atraso_falha_s`, 0 nos testes) trava força bruta sem estado. Cabe no limite de 5 s do cliente.
+- **Consultas sem credencial no servidor.** Quem falar com o servidor sem a janela consegue listar, mas não decidir. Fica registrado como limitação no relatório; o token de sessão resolveria, ao custo de estado e expiração.
+- **`.env` com parser mínimo** (`CHAVE=valor`, `#` comenta). `--env` troca o caminho.
+
+### Riscos
+
+- **Senha esquecida ou `.env` perdido:** gera-se outro hash com `scripts/gerar_hash.py`. O README explica.
+- **Testes de interface** passam a abrir diálogo ao decidir. Mitigação: `usuario` informado nos testes e ajuste do passo de decidir.
+- **scrypt custa ~50 ms por tentativa.** Aceitável aqui; sobrecarga por tentativa é desejável.
+
+### Estratégia de teste
+
+- `test_credenciais.py` (novo): hash com sal diferente a cada vez, verificação certa e errada, usuário errado, `.env` com comentários e sem a chave.
+- `test_integracao_tls.py`: `login` certo e errado (mesma mensagem, código `CREDENCIAIS_INVALIDAS`), `decidir` sem credencial, com senha errada (nada grava) e com a certa; pausa na falha; log sem segredo.
+- `test_interface.py`: login libera a janela, falha mantém o diálogo, Cancelar encerra, senha mascarada; Aprovar e Desaprovar pedem a senha, senha errada não grava.
+
 ## Rastreio
 
 | RF | Componentes | Como testar |
@@ -305,3 +351,7 @@ Cobre o RF-19. Revisão pequena: uma operação sem parâmetros e uma aba só de
 | RF-17 | operação `decidir`, botões em `interface.py` | integração e teste da janela: aprovar, desaprovar e trocar a decisão |
 | RF-18 | `solicitacoes.py`, `montar_ficha`, lista, documento e ficha | integração reiniciando o servidor; teste da ficha com a situação |
 | RNF-07 | `solicitacoes.py`, `.gitignore` | teste de concorrência, de arquivo inválido e de falha de gravação; `git check-ignore` |
+| RF-19 | `regras.py`, operação `regras`, aba "Regras" | `test_regras.py`; integração da operação; teste da janela com as três abas |
+| RF-20 | `credenciais.py`, operação `login`, diálogo de login em `interface.py` | integração com credencial certa e errada; teste da janela: libera, falha, cancela, senha mascarada |
+| RF-21 | operação `decidir` autenticada, diálogo de confirmação | integração: sem senha, senha errada (não grava) e certa; teste da janela: Aprovar e Desaprovar pedem a senha |
+| RNF-08 | `credenciais.py`, `scripts/gerar_hash.py`, `.gitignore`, `.env.example` | teste do hash; `git check-ignore .env`; teste de que o log não traz usuário nem senha |
