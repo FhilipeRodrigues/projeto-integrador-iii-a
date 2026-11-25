@@ -34,25 +34,35 @@ python scripts/gerar_certificados.py
 
 Isso cria a CA local e o certificado do servidor. As chaves privadas ficam só na sua máquina: `certs/` está no `.gitignore` e não vai para o repositório.
 
-**2. Iniciar o servidor** (deixe esse terminal aberto):
+**2. Criar o login** (uma vez; cria o arquivo `.env`, que não vai para o repositório):
+
+```
+python -m scripts.gerar_hash
+```
+
+O script pede a senha duas vezes, sem mostrá-la, e imprime uma linha `SENHA_HASH=...`. Copie `.env.example` para `.env`, escreva o `USUARIO=` que quiser e cole essa linha. O `.env` guarda só o **hash** da senha (scrypt com sal), nunca a senha. Sem o `.env`, o servidor não sobe e explica o que fazer. Para trocar a senha, gere outro hash e substitua a linha.
+
+**3. Iniciar o servidor** (deixe esse terminal aberto):
 
 ```
 python -m consulta.servidor
 ```
 
-Ele escuta em `127.0.0.1:8443`. Opções: `--host`, `--porta` e `--certs` (pasta dos certificados). Se a porta estiver ocupada, use `--porta 9443` aqui e no cliente.
+Ele escuta em `127.0.0.1:8443`. Opções: `--host`, `--porta`, `--certs` (pasta dos certificados) e `--env` (caminho do `.env`). Se a porta estiver ocupada, use `--porta 9443` aqui e no cliente.
 
-**3. Abrir o cliente** (em outro terminal):
+**4. Abrir o cliente** (em outro terminal):
 
 ```
 python -m consulta.interface
 ```
 
-Opções: `--host`, `--porta` e `--ca` (caminho do `ca.crt`). Na janela, digite `maria` e clique em Buscar. A lista mostra os servidores com esse nome (1 na base fictícia). Escolha um para ver a ficha.
+Opções: `--host`, `--porta` e `--ca` (caminho do `ca.crt`). A janela abre pelo **login**: informe o usuário e a senha definidos no passo 2. Qualquer outro usuário ou senha é recusado com "Usuário ou senha inválidos.", e o programa só mostra os dados depois de entrar. Então digite `maria` e clique em Buscar. A lista mostra os servidores com esse nome (1 na base fictícia). Escolha um para ver a ficha.
 
-Na aba **Solicitações**, escolha um requerimento para ver o documento e clique em **Aprovar** ou **Desaprovar**. A última decisão vale, e a situação aparece na lista, no documento e na ficha do servidor (aba Consulta).
+Na aba **Solicitações**, escolha um requerimento para ver o documento e clique em **Aprovar** ou **Desaprovar**. A janela pede a senha de novo e o **servidor** confere a credencial antes de gravar; com senha errada nada é gravado. A última decisão vale, e a situação aparece na lista, no documento e na ficha do servidor (aba Consulta).
 
 A aba **Regras** mostra, só para consulta, as regras básicas de aposentadoria (regra geral, PCD e doença profissional ou acidente de trabalho). O texto vem do servidor e é simplificado: o sistema não calcula nem diz se um servidor atende.
+
+**Limitação conhecida:** só a decisão é protegida no servidor. As consultas (busca, ficha, solicitações, regras) não exigem credencial: quem falasse com o servidor sem usar a janela conseguiria listá-las, mas não decidir. Um token de sessão fecharia isso, ao custo de estado e expiração no servidor, e ficou fora do protótipo.
 
 **Zerar as decisões:** pare o servidor, apague `data/solicitacoes.json` e inicie o servidor de novo. Ele sorteia 10 solicitações novas, todas pendentes. A decisão fica nesse arquivo, por isso sobrevive a reiniciar o servidor.
 
@@ -74,7 +84,7 @@ O cliente só aceita certificados assinados pela CA em `certs/ca.crt`. Para ver 
 
 3. Abra o cliente normalmente (`python -m consulta.interface`) e faça uma busca. O aperto de mão TLS falha e a janela mostra "Servidor não confiável: o certificado não foi emitido pela CA do projeto." Nenhum dado é trocado.
 
-Para voltar ao normal, pare o servidor falso e rode de novo o passo 2.
+Para voltar ao normal, pare o servidor falso e rode de novo o passo 3.
 
 ## Testes
 
@@ -89,7 +99,7 @@ Os testes de integração geram certificados em pasta temporária e sobem o serv
 
 ```
 consulta/    servidor, cliente de rede, protocolo, regras e janela
-scripts/     gerar_base.py (reproduz a base) e gerar_certificados.py
+scripts/     gerar_base.py (reproduz a base), gerar_certificados.py e gerar_hash.py (login)
 data/        servidores.json (base fictícia) e solicitacoes.json (criado pelo servidor)
 tests/       testes automatizados
 docs/        PRD, TechSpec, tasks e checkpoints
