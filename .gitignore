@@ -23,3 +23,6 @@ certs/
 
 # Estado da execução: solicitações sorteadas e decisões (o servidor recria)
 data/solicitacoes.json
+
+# Relatório técnico do PI: entregue na Plataforma A, fica só local
+docs/relatorio/
