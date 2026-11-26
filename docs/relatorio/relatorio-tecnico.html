@@ -1,0 +1,97 @@
+<!doctype html>
+<html lang="pt-BR">
+<head>
+<meta charset="utf-8">
+<title>Relatório técnico: Consulta de servidores municipais (PI III-A)</title>
+<style>
+  @page { size: A4; margin: 2.5cm 3cm 2.5cm 3cm; }
+  html { -webkit-print-color-adjust: exact; print-color-adjust: exact; }
+  body { font-family: Arial, Helvetica, sans-serif; font-size: 12pt; line-height: 1.15; color: #000; margin: 0; }
+  h1 { font-size: 12pt; font-weight: bold; text-align: center; margin: 0 0 4pt; text-transform: uppercase; }
+  .ident { text-align: center; margin: 0 0 12pt; }
+  h2 { font-size: 12pt; font-weight: bold; margin: 12pt 0 6pt; text-transform: uppercase; break-after: avoid; }
+  h3 { font-size: 12pt; font-weight: bold; margin: 8pt 0 4pt; break-after: avoid; }
+  p { margin: 0 0 6pt; text-align: justify; }
+  ul { margin: 0 0 6pt; padding-left: 16pt; }
+  li { margin: 0 0 3pt; text-align: justify; }
+  code { font-family: Arial, Helvetica, sans-serif; font-style: italic; }
+  table { border-collapse: collapse; width: 100%; margin: 0 0 8pt; break-inside: avoid; }
+  th, td { border: 0.75pt solid #000; padding: 2pt 4pt; vertical-align: top; text-align: left; }
+  th { font-weight: bold; }
+  .figs { display: flex; gap: 0.4cm; justify-content: center; align-items: flex-start; margin: 4pt 0 8pt; break-inside: avoid; }
+  figure { margin: 0; text-align: center; }
+  figure img { border: 0.75pt solid #777; display: block; margin: 0 auto 2pt; }
+  figcaption { font-size: 10pt; line-height: 1.1; text-align: center; }
+  .w2 img { width: 6.6cm; }
+  .w3 img { width: 4.6cm; }
+  .pendente { border: 1pt dashed #000; padding: 4pt 6pt; margin: 0 0 6pt; }
+</style>
+</head>
+<body>
+
+<h1>Consulta de servidores municipais: protótipo cliente-servidor com comunicação protegida</h1>
+<p class="ident">Projeto Integrador III-A · Análise e Desenvolvimento de Sistemas · PUC Goiás<br>
+Estudante: Fhilipe Rodrigues · Professor: Thalles Bruno G. N. dos Santos · Goiânia, 2026</p>
+
+<h2>1. Identificação da instituição</h2>
+<p>O Tribunal de Contas dos Municípios do Estado de Goiás (TCM-GO) é o órgão de controle externo que fiscaliza a aplicação dos recursos públicos pelos municípios goianos. Entre as suas atividades está a apreciação, para fins de registro, da legalidade dos atos de pessoal dos municípios, como admissões, aposentadorias e pensões.</p>
+<p>O projeto foi feito para a Secretaria de Atos de Pessoal, unidade em que o estudante trabalha e que examina esses atos. A representante da instituição é a Juliana, chefe imediata do estudante, que assinou o Termo de Formalização do Convênio.</p>
+
+<h2>2. Problema identificado</h2>
+<p>Para analisar um pedido de aposentadoria, o analista precisa reunir a situação funcional do servidor: idade, tempo de contribuição, órgão, data de ingresso, remuneração e condições especiais, como deficiência (PCD) ou doença profissional. Os servidores pertencem a municípios diferentes, e essas informações ficam em fontes separadas. A consulta é lenta e sujeita a erro, sobretudo quando o analista não lembra a grafia exata do nome.</p>
+<p>A solução proposta é uma aplicação de consulta em que o analista busca o servidor por parte do nome, restringe a busca a um município, abre a ficha com os dados da análise e registra a decisão sobre o requerimento. Como a aplicação trata dados pessoais, o protótipo usa uma base fictícia de 10 municípios goianos e 50 servidores, gerada por script com semente fixa. Assim nenhum dado real do TCM-GO é exposto, em linha com a LGPD, e a base pode ser recriada igual em qualquer máquina.</p>
+
+<h2>3. Solução desenvolvida</h2>
+<h3>3.1 Funcionalidades</h3>
+<ul>
+  <li><strong>Login:</strong> a janela abre pedindo usuário e senha. Na primeira execução não existe conta, e o botão "Criar conta" cadastra o único usuário do sistema.</li>
+  <li><strong>Consulta:</strong> busca por trecho do nome, sem diferenciar acentos nem maiúsculas, com filtro por município. A ficha mostra os dados da análise, com idade e tempo de contribuição calculados pelo servidor na data da solicitação. A data de nascimento nunca sai do servidor.</li>
+  <li><strong>Solicitações:</strong> dez requerimentos de aposentadoria fictícios, cada um com o documento formal. O analista confere os dados na aba Consulta e clica em Aprovar ou Desaprovar. A janela pede a senha de novo, e a decisão fica gravada mesmo depois de reiniciar o servidor.</li>
+  <li><strong>Regras:</strong> texto de apoio com as regras básicas de aposentadoria (regra geral, PCD e doença profissional). O sistema não decide se o servidor pode se aposentar; a decisão é do analista.</li>
+</ul>
+
+<h3>3.2 Arquitetura cliente-servidor</h3>
+<p>O sistema foi escrito em Python usando só a biblioteca padrão (<code>socket</code>, <code>ssl</code>, <code>threading</code>, <code>tkinter</code>, <code>hashlib</code>), então roda sem instalar pacotes. O servidor carrega a base de um arquivo JSON e atende cada conexão em uma thread própria, o que permite vários clientes ao mesmo tempo. O cliente é uma janela Tkinter. Cada ação na janela abre uma conexão, envia uma linha JSON com a operação, recebe uma linha JSON com a resposta e fecha a conexão. As chamadas de rede rodam fora da thread da janela, que continua respondendo mesmo se o servidor cair.</p>
+<table>
+  <tr><th style="width:32%">Operação</th><th>O que o servidor devolve</th></tr>
+  <tr><td>municipios, buscar, ficha</td><td>lista de municípios, servidores encontrados e ficha com os cálculos</td></tr>
+  <tr><td>solicitacoes, documento</td><td>lista dos requerimentos e o documento de um deles</td></tr>
+  <tr><td>decidir</td><td>grava Aprovada ou Desaprovada, depois de conferir usuário e senha</td></tr>
+  <tr><td>regras, login, criar_conta</td><td>texto das regras; confere a credencial; cria a conta</td></tr>
+</table>
+<p>Pedidos inválidos recebem uma resposta de erro com código (por exemplo, <code>REQUISICAO_INVALIDA</code> ou <code>OPERACAO_DESCONHECIDA</code>) e não afetam as outras conexões.</p>
+
+<h3>3.3 Mecanismo de segurança</h3>
+<ul>
+  <li><strong>TLS com autoridade certificadora local.</strong> Toda a comunicação passa pelo módulo <code>ssl</code>. Um script usa o OpenSSL para criar uma CA local (RSA 2048, SHA-256) e o certificado do servidor, assinado por ela. O cliente só confia nessa CA, confere o nome do servidor no certificado e não aceita versão anterior ao TLS 1.2; nos testes, a conexão usou TLS 1.3. As chaves privadas ficam fora do repositório.</li>
+  <li><strong>Senha.</strong> O servidor guarda só o hash da senha (scrypt com sal, no arquivo <code>.env</code>, fora do repositório). A conta só pode ser criada uma vez. Usuário ou senha errados recebem sempre a mesma mensagem, depois de uma pausa de 1 segundo, o que dificulta tentativas em série.</li>
+  <li><strong>Entrada e exposição de dados.</strong> O servidor valida operação, tipos e tamanhos (nome até 100 caracteres, mensagem até 64 KiB, 5 s de tempo limite). O log registra a operação e o resultado, mas não o conteúdo das fichas nem usuário e senha. O servidor escuta só no endereço local (127.0.0.1).</li>
+</ul>
+
+<h2>4. Resultados</h2>
+<p>As capturas abaixo foram feitas com o servidor e a janela reais, comunicando por TLS 1.3. A faixa amarela na janela avisa que os dados são fictícios.</p>
+<div class="figs w2">
+  <figure><img src="../resumo/img/03-ficha.png" alt="Ficha do servidor"><figcaption>Figura 1: busca e ficha do servidor, com idade e tempo de contribuição calculados no servidor.</figcaption></figure>
+  <figure><img src="../resumo/img/09-solicitacao-aprovada.png" alt="Requerimento aprovado"><figcaption>Figura 2: aba Solicitações com o documento formal e a decisão registrada.</figcaption></figure>
+</div>
+<div class="figs w3">
+  <figure><img src="../resumo/img/13-login-sem-conta.png" alt="Login recusado"><figcaption>Figura 3: login recusado antes de existir conta.</figcaption></figure>
+  <figure><img src="../resumo/img/15-criar-conta.png" alt="Criar conta"><figcaption>Figura 4: criação da conta, com senha mascarada.</figcaption></figure>
+  <figure><img src="../resumo/img/18-confirmar-senha.png" alt="Confirmar senha"><figcaption>Figura 5: senha pedida de novo ao aprovar.</figcaption></figure>
+</div>
+<div class="figs w2">
+  <figure><img src="../resumo/img/07-ca-falsa.png" alt="Servidor não confiável"><figcaption>Figura 6: servidor com certificado de outra CA. O cliente recusa a conexão antes de trocar qualquer dado.</figcaption></figure>
+  <figure><img src="../resumo/img/12-regras.png" alt="Aba Regras"><figcaption>Figura 7: aba Regras, só para consulta.</figcaption></figure>
+</div>
+<p>A Figura 6 é a prova do mecanismo de segurança: um segundo servidor, com certificado emitido por outra CA, ficou no ar e respondia por TLS, mas o cliente recusou o aperto de mão e mostrou "Servidor não confiável". Nenhum dado foi trocado.</p>
+<p>O projeto tem 272 testes automatizados, todos passando (um é pulado por valer só em sistemas POSIX). Eles cobrem os cálculos da ficha, a busca, o protocolo, a geração dos certificados, a comunicação real por TLS (incluindo duas consultas simultâneas e a recusa da CA falsa), o login, a criação de conta, a gravação das decisões e a janela. Um teste confere que todo import vem da biblioteca padrão.</p>
+<h3>Demonstração à instituição</h3>
+<p class="pendente">[A PREENCHER PELO ESTUDANTE: data, com quem, o que foi mostrado e as considerações ou sugestões recebidas. Se a demonstração não acontecer, substituir por um relato fiel da interação com a instituição.]</p>
+
+<h2>5. Considerações finais</h2>
+<p><strong>Resultados alcançados.</strong> O protótipo atende ao que a proposta pede: um servidor que guarda as informações e responde por rede, um cliente que consulta e apresenta os dados de forma organizada, execução local sem banco de dados e comunicação protegida por TLS com uma cadeia de confiança própria. O fluxo de solicitações vai um passo além: o analista registra a decisão sobre cada requerimento, confirmada com a senha.</p>
+<p><strong>Dificuldades encontradas.</strong> A partir do Python 3.13, a verificação de certificados é mais rígida e recusa certificados sem certas extensões. Em vez de desligar a verificação, a CA e o servidor foram emitidos com as extensões exigidas (restrições básicas, uso de chave e nome alternativo). O Tkinter não aceita chamadas de outras threads, então as respostas da rede passam por uma fila lida pela janela. No Windows, a conversão automática de fim de linha do Git alterava a base de dados baixada e quebrava a comparação byte a byte do teste de reprodutibilidade; um arquivo <code>.gitattributes</code> resolveu.</p>
+<p><strong>Possíveis melhorias.</strong> Integração com as bases reais do TCM-GO, com o tratamento de dados pessoais adequado; vários usuários com perfis e cadastro feito por um administrador; acesso pela rede interna do órgão, com o cliente em outro computador; e histórico das decisões, com quem decidiu e quando.</p>
+
+</body>
+</html>
