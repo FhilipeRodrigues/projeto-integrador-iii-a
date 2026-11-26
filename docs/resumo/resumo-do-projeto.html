@@ -44,7 +44,7 @@
 
 <h1>Consulta de servidores municipais</h1>
 <p class="sub">Protótipo cliente-servidor com comunicação protegida por TLS, feito para a Secretaria de Atos de Pessoal do TCM-GO (Projeto Integrador III-A, PUC Goiás).</p>
-<p class="meta">Resumo técnico para acompanhamento do projeto, em 24/11/2026. Não é o relatório oficial do PI (RP-03), que tem formato e seções próprios. Dados do sistema: 100% fictícios.</p>
+<p class="meta">Resumo técnico para acompanhamento do projeto, em 25/11/2026. Não é o relatório oficial do PI (RP-03), que tem formato e seções próprios. Dados do sistema: 100% fictícios.</p>
 
 <div class="box">
   <strong>Em uma frase:</strong> um servidor Python guarda uma base fictícia de 50 servidores de 10 municípios de Goiás e responde, por um canal TLS, às buscas de uma janela Tkinter, que mostra a lista de resultados e a ficha completa de cada servidor. Uma segunda aba traz 10 requerimentos de aposentadoria fictícios, que o analista aprova ou desaprova, com a situação gravada no servidor. O cliente só confia em servidores com certificado emitido pela CA local do projeto.
@@ -55,15 +55,15 @@
 <table>
   <tr><th style="width:21%">Pedido da proposta</th><th>Como o projeto atende</th><th style="width:14%">Situação</th></tr>
   <tr><td>Instituição real e necessidade identificada</td><td>TCM-GO. A análise de aposentadorias exige consultar a situação funcional de servidores de vários municípios, hoje em fontes separadas. Representante: Juliana, chefe direta do estudante.</td><td class="ok">Definido</td></tr>
-  <tr><td>Servidor que armazena, recebe solicitações, processa e devolve</td><td><code>consulta/servidor.py</code> carrega <code>data/servidores.json</code>, atende cada conexão em uma thread e executa sete operações: <code>municipios</code>, <code>buscar</code>, <code>ficha</code>, <code>solicitacoes</code>, <code>documento</code>, <code>decidir</code> e <code>regras</code>. As solicitações ficam em <code>data/solicitacoes.json</code> (consulta/solicitacoes.py).</td><td class="ok">Pronto</td></tr>
-  <tr><td>Cliente que consulta por rede e apresenta de forma organizada</td><td>Janela Tkinter (<code>consulta/interface.py</code>): campo de nome, filtro de município, lista de resultados e painel com a ficha. A aba Solicitações lista os requerimentos, mostra o documento formal e tem os botões Aprovar e Desaprovar. A aba Regras mostra, só para consulta, as regras básicas de aposentadoria. Cada ação vira uma requisição pela rede.</td><td class="ok">Pronto</td></tr>
+  <tr><td>Servidor que armazena, recebe solicitações, processa e devolve</td><td><code>consulta/servidor.py</code> carrega <code>data/servidores.json</code>, atende cada conexão em uma thread e executa nove operações: <code>municipios</code>, <code>buscar</code>, <code>ficha</code>, <code>solicitacoes</code>, <code>documento</code>, <code>decidir</code>, <code>regras</code>, <code>login</code> e <code>criar_conta</code>. As solicitações ficam em <code>data/solicitacoes.json</code> (consulta/solicitacoes.py).</td><td class="ok">Pronto</td></tr>
+  <tr><td>Cliente que consulta por rede e apresenta de forma organizada</td><td>Janela Tkinter (<code>consulta/interface.py</code>): campo de nome, filtro de município, lista de resultados e painel com a ficha. A aba Solicitações lista os requerimentos, mostra o documento formal e tem os botões Aprovar e Desaprovar. A aba Regras mostra, só para consulta, as regras básicas de aposentadoria. A janela abre pelo login (com o botão Criar conta na primeira vez) e pede a senha de novo ao aprovar ou desaprovar. Cada ação vira uma requisição pela rede.</td><td class="ok">Pronto</td></tr>
   <tr><td>Sem banco, execução local, sem hospedagem</td><td>Base em arquivo JSON, tudo em <code>127.0.0.1</code>, só biblioteca padrão do Python (um teste confere os imports).</td><td class="ok">Pronto</td></tr>
   <tr><td>Proteger a comunicação com recurso de segurança existente</td><td>TLS (módulo <code>ssl</code> do Python) com CA local criada pelo <code>openssl</code>. O cliente exige certificado assinado pela CA do projeto e recusa qualquer outro.</td><td class="ok">Pronto</td></tr>
-  <tr><td>Evitar exposição de informação sensível</td><td>Base fictícia (aviso na janela e no README). A data de nascimento nunca sai do servidor, só a idade. Chaves privadas fora do Git. O log do servidor não registra o conteúdo das fichas.</td><td class="ok">Pronto</td></tr>
+  <tr><td>Evitar exposição de informação sensível</td><td>Base fictícia (aviso na janela e no README). A data de nascimento nunca sai do servidor, só a idade. Chaves privadas fora do Git. O log do servidor não registra o conteúdo das fichas nem usuário e senha. A senha só fica guardada como hash scrypt com sal, no <code>.env</code>, fora do Git.</td><td class="ok">Pronto</td></tr>
   <tr><td>Demonstrar à instituição e registrar sugestões</td><td>Demonstração à Juliana antes de 26/11, com os campos da ficha conferidos por ela.</td><td class="pend">Pendente</td></tr>
   <tr><td>Código-fonte com instruções de execução</td><td>Repositório no GitHub (PR #2 mergeado na <code>main</code>) e <code>README.md</code> com o passo a passo.</td><td class="ok">Pronto</td></tr>
   <tr><td>Relatório técnico PDF (até 5 págs)</td><td>A escrever, com as capturas de tela deste documento como evidência.</td><td class="pend">Pendente (07/12)</td></tr>
-  <tr><td>Vídeo de até 10 min</td><td>A gravar: servidor e cliente rodando, uma busca, a ficha, a recusa do servidor falso.</td><td class="pend">Pendente (07/12)</td></tr>
+  <tr><td>Vídeo de até 10 min</td><td>A gravar: servidor e cliente rodando, tentativa de entrar sem conta, criação da conta, senha errada e certa, uma busca, a ficha, aprovar com confirmação de senha e a recusa do servidor falso.</td><td class="pend">Pendente (07/12)</td></tr>
   <tr><td>Carta de Início e Termos assinados</td><td>Carta assinada pelo estudante e pelo professor. Termos assinados e enviados em 20/11 (prazo 23/11, 23h59).</td><td class="ok">Pronto</td></tr>
 </table>
 
@@ -97,9 +97,10 @@
 
 <ul>
   <li><strong>Protocolo:</strong> uma conexão TLS por requisição. O cliente envia uma linha JSON (UTF-8), o servidor responde uma linha JSON e a conexão fecha. Limite de 64 KiB por linha e 5 s de timeout.</li>
-  <li><strong>Operações:</strong> <code>municipios</code> (lista para o filtro), <code>buscar</code> (nome e município), <code>ficha</code> (por id), <code>solicitacoes</code> (lista dos requerimentos), <code>documento</code> (requerimento de uma solicitação) e <code>decidir</code> (aprovar ou desaprovar).</li>
+  <li><strong>Operações:</strong> <code>municipios</code> (lista para o filtro), <code>buscar</code> (nome e município), <code>ficha</code> (por id), <code>solicitacoes</code> (lista dos requerimentos), <code>documento</code> (requerimento de uma solicitação), <code>decidir</code> (aprovar ou desaprovar, com usuário e senha), <code>regras</code> (texto das regras), <code>login</code> e <code>criar_conta</code>.</li>
+  <li><strong>Login:</strong> um único usuário. Na primeira execução não há conta: o servidor sobe assim mesmo, e o botão Criar conta, no login, envia usuário e senha pelo TLS. O servidor gera o hash (scrypt com sal) e grava o <code>.env</code>; com conta criada, recusa uma segunda. Usuário ou senha errados recebem sempre a mesma mensagem, depois de 1 s de pausa. Não há sessão: cada decisão leva a credencial, e o servidor confere de novo antes de gravar.</li>
   <li><strong>Solicitações:</strong> o servidor sorteia 10 solicitações de servidores diferentes na primeira execução e grava em <code>data/solicitacoes.json</code> (fora do Git). Todas nascem Pendentes. A decisão pode ser trocada, a última vale, e sobrevive a reiniciar o servidor. Se o arquivo estiver inválido, o servidor se recusa a subir, e uma falha ao gravar mantém a situação anterior.</li>
-  <li><strong>Erros tratados:</strong> <code>REQUISICAO_INVALIDA</code>, <code>OPERACAO_DESCONHECIDA</code>, <code>NAO_ENCONTRADO</code> e <code>ERRO_INTERNO</code>. Um erro afeta só a conexão que o causou.</li>
+  <li><strong>Erros tratados:</strong> <code>REQUISICAO_INVALIDA</code>, <code>OPERACAO_DESCONHECIDA</code>, <code>NAO_ENCONTRADO</code>, <code>ERRO_INTERNO</code>, <code>CREDENCIAIS_INVALIDAS</code> e <code>CONTA_JA_EXISTE</code>. Um erro afeta só a conexão que o causou.</li>
   <li><strong>Cálculos no servidor:</strong> idade e tempo de contribuição, em anos completos, até a data da solicitação. O cliente só apresenta.</li>
   <li><strong>Janela que não trava:</strong> a rede roda em thread de trabalho, e o resultado volta por uma fila. Se o servidor cair, a janela mostra o aviso e continua aberta.</li>
 </ul>
@@ -112,7 +113,7 @@
   <tr><td>Dados</td><td>Base <strong>fictícia</strong>, 10 municípios e 50 servidores, gerada por script com semente fixa</td><td>Evita expor dados reais (LGPD) e mantém o escopo pequeno. Gerar por script deixa a base reproduzível e versionável.</td></tr>
   <tr><td>Linguagem</td><td>Python, só biblioteca padrão</td><td><code>socket</code>, <code>ssl</code>, <code>threading</code> e <code>tkinter</code> já vêm com a linguagem. Sem <code>pip install</code>, o professor roda direto.</td></tr>
   <tr><td>Protocolo</td><td>JSON por linha sobre socket TLS</td><td>A proposta fala em "comunicação em rede". Fácil de mostrar no vídeo e sem framework. HTTP/REST traria mais peças sem ganho.</td></tr>
-  <tr><td>Uma conexão por requisição</td><td>Conectar, pedir, receber, fechar</td><td>Sem autenticação não há sessão. Cada consulta é independente e uma queda aparece só na ação que falhou.</td></tr>
+  <tr><td>Uma conexão por requisição</td><td>Conectar, pedir, receber, fechar</td><td>Não há sessão: o login só libera a janela, e cada decisão leva a credencial de novo. Cada consulta é independente e uma queda aparece só na ação que falhou.</td></tr>
   <tr><td>Concorrência</td><td>Uma thread por conexão</td><td>Atende vários clientes com pouco código. A base é só leitura, então não precisa de trava. O handshake roda na thread, e um cliente lento não bloqueia os outros.</td></tr>
   <tr><td>Segurança</td><td>TLS com <strong>CA local</strong> (RSA 2048, SHA-256), cliente confia só nela</td><td>O material das disciplinas trata de TLS, certificados e Autoridade Certificadora. Um certificado autoassinado seria mais simples, mas não mostraria a cadeia de confiança. A biblioteca externa <code>cryptography</code> foi descartada por quebrar a regra de não instalar nada.</td></tr>
   <tr><td>Certificados estritos</td><td>CA com <code>basicConstraints</code> e <code>keyUsage</code> críticos; servidor com SAN e <code>serverAuth</code></td><td>O Python 3.13+ liga <code>VERIFY_X509_STRICT</code>. Em vez de desligar a verificação, os certificados foram emitidos de forma compatível.</td></tr>
@@ -120,25 +121,26 @@
   <tr><td>Busca</td><td>Por trecho do nome, sem acento e sem diferenciar maiúsculas; filtro por município; nome vazio lista todos</td><td>O analista nem sempre lembra a grafia exata. Normalização em NFKD, igual para busca e comparação.</td></tr>
   <tr><td>Cálculos</td><td>Idade e tempo de contribuição em anos completos, até a data da solicitação</td><td>Mesma referência de data para os dois valores. Simplificação aceita pelo estudante.</td></tr>
   <tr><td>Solicitações</td><td>10 requerimentos fictícios sorteados uma vez e gravados em arquivo; situação persistente (Pendente, Aprovada, Desaprovada)</td><td>Mostra o fluxo do analista sem banco de dados. O documento traz só os dados do requerimento: idade, tempo de contribuição, PCD, doença e remuneração ficam na aba Consulta, para o analista conferir. A decisão pode ser trocada para repetir a demonstração.</td></tr>
-  <tr><td>Escopo recusado</td><td>Sem login, sem indicar elegibilidade à aposentadoria, sem edição dos dados da base</td><td>A proposta manda evitar complexidade excessiva. O sistema só apresenta os dados da base; a única coisa gravada é a decisão das solicitações. Login ficou como melhoria futura.</td></tr>
-  <tr><td>Método de trabalho</td><td>Spec-Driven: PRD, TechSpec, 17 tasks, check-spec e execução task a task</td><td>Cada requisito (19 RF, 7 RNF, 6 RP) tem rastreio até um componente e um teste. Nada foi feito sem requisito.</td></tr>
+  <tr><td>Login</td><td>Um usuário, senha guardada como hash scrypt com sal no <code>.env</code>; conta criada uma única vez pela janela; senha pedida de novo ao decidir</td><td>Só quem é autorizado registra decisões. O hash vem da biblioteca padrão (<code>hashlib.scrypt</code>), sem dependência nova. Criar a conta pela janela evita o terminal na demonstração; só se cria uma vez, para ninguém trocar a senha sem saber a antiga. Ficaram de fora vários usuários, troca de senha e sessão com token.</td></tr>
+  <tr><td>Escopo recusado</td><td>Sem indicar elegibilidade à aposentadoria, sem edição dos dados da base, sem perfis</td><td>A proposta manda evitar complexidade excessiva. O sistema só apresenta os dados da base; o que se grava é a decisão das solicitações e a conta do analista.</td></tr>
+  <tr><td>Método de trabalho</td><td>Spec-Driven: PRD, TechSpec, 19 tasks, check-spec e execução task a task</td><td>Cada requisito (22 RF, 8 RNF, 6 RP) tem rastreio até um componente e um teste. Nada foi feito sem requisito.</td></tr>
 </table>
 
 <h2>4. Ferramentas usadas</h2>
 
 <table>
   <tr><th style="width:24%">Ferramenta</th><th>Uso no projeto</th></tr>
-  <tr><td>Python 3.15 (código para 3.10+)</td><td>Servidor, cliente, scripts e testes. Módulos: <code>socket</code>, <code>ssl</code>, <code>threading</code>, <code>json</code>, <code>queue</code>, <code>unicodedata</code>, <code>datetime</code>, <code>argparse</code>.</td></tr>
-  <tr><td>Tkinter / ttk</td><td>Janela do cliente: <code>Notebook</code> (abas Consulta e Solicitações), <code>Entry</code>, <code>Combobox</code>, <code>Treeview</code>, painel de ficha e <code>Text</code> para o documento.</td></tr>
+  <tr><td>Python 3.15 (código para 3.10+)</td><td>Servidor, cliente, scripts e testes. Módulos: <code>socket</code>, <code>ssl</code>, <code>threading</code>, <code>json</code>, <code>queue</code>, <code>unicodedata</code>, <code>datetime</code>, <code>argparse</code>, <code>hashlib</code> (scrypt) e <code>hmac</code> (comparação em tempo constante).</td></tr>
+  <tr><td>Tkinter / ttk</td><td>Janela do cliente: <code>Notebook</code> (abas Consulta, Solicitações e Regras), <code>Toplevel</code> (login, criar conta e confirmação de senha), <code>Entry</code>, <code>Combobox</code>, <code>Treeview</code>, painel de ficha e <code>Text</code> para o documento.</td></tr>
   <tr><td>OpenSSL 3.5</td><td>Gera a CA local e o certificado do servidor (<code>scripts/gerar_certificados.py</code>). No Windows vem com o Git for Windows.</td></tr>
-  <tr><td><code>unittest</code> e <code>ast</code></td><td>210 testes automatizados. O <code>ast</code> confere que nenhum import sai da biblioteca padrão.</td></tr>
+  <tr><td><code>unittest</code> e <code>ast</code></td><td>272 testes automatizados. O <code>ast</code> confere que nenhum import sai da biblioteca padrão.</td></tr>
   <tr><td>Git e GitHub</td><td>Commits no padrão Conventional Commits, uma branch de trabalho e Pull Request revisado e mergeado pelo estudante.</td></tr>
   <tr><td>Claude Code</td><td>Assistente de desenvolvimento, usado no fluxo Spec-Driven (levantamento do PRD, TechSpec, tasks em Gherkin, implementação e testes). Decisões e aprovações ficaram com o estudante.</td></tr>
   <tr><td>Context7</td><td>Consulta à documentação do módulo <code>ssl</code> do CPython (3.13), para configurar a verificação estrita do certificado.</td></tr>
 </table>
 
 <h2>5. O que o sistema mostra (capturas da janela real)</h2>
-<p>Capturas feitas em 24/11/2026 com o servidor e a janela reais, comunicando por TLS 1.3 em <code>127.0.0.1</code>. A faixa amarela avisa que os dados são fictícios. As capturas 7 a 10 usam um arquivo de solicitações novo, então o sorteio delas não é o mesmo da sua máquina.</p>
+<p>Capturas 1 a 12 feitas em 24/11/2026 e 13 a 18 (login) em 25/11/2026, com o servidor e a janela reais, comunicando por TLS 1.3 em <code>127.0.0.1</code>. A faixa amarela avisa que os dados são fictícios. As capturas 7 a 10 usam um arquivo de solicitações novo, então o sorteio delas não é o mesmo da sua máquina.</p>
 
 <div class="duo">
   <figure class="fig"><img src="img/01-inicial.png" alt="Janela inicial"><figcaption>1. Tela inicial: faixa de aviso, abas Consulta, Solicitações e Regras, nome, filtro de município e botão Buscar. A lista já abre com os 50 servidores, sem clicar em nada.</figcaption></figure>
@@ -172,20 +174,34 @@
     <strong>Por que a captura 12 importa.</strong> O servidor falso estava no ar e respondia por TLS, mas seu certificado foi assinado por uma CA diferente da <code>ca.crt</code> do projeto. O aperto de mão falhou antes de qualquer consulta, então nenhum dado foi trocado. O log do servidor falso registra <code>falha_de_conexao (SSLError)</code>. É a prova do requisito de proteger a comunicação (RF-14).
   </div>
 </div>
+<div class="duo">
+  <figure class="fig"><img src="img/13-login-sem-conta.png" alt="Login recusado antes de existir conta"><figcaption>13. A janela abre pelo login. Antes de existir conta, qualquer tentativa recebe "Usuário ou senha inválidos.", sem dizer o que errou.</figcaption></figure>
+  <figure class="fig"><img src="img/14-criar-conta-senhas-diferentes.png" alt="Criar conta com senhas diferentes"><figcaption>14. Criar conta: usuário, senha e repetição, mascaradas. Senhas diferentes são barradas na própria janela, sem ir ao servidor.</figcaption></figure>
+</div>
+<div class="duo">
+  <figure class="fig"><img src="img/15-criar-conta.png" alt="Criar conta preenchida"><figcaption>15. Dados prontos. Ao confirmar, o servidor gera o hash scrypt com sal e grava o <code>.env</code>.</figcaption></figure>
+  <figure class="fig"><img src="img/16-conta-criada.png" alt="Login depois de criar a conta"><figcaption>16. Conta criada: a janela volta ao login com o usuário preenchido.</figcaption></figure>
+</div>
+<div class="duo">
+  <figure class="fig"><img src="img/17-senha-errada.png" alt="Senha errada recusada"><figcaption>17. Senha errada: a mesma mensagem, a senha é limpa e a janela principal não abre. Com a senha certa, a janela mostra os 50 servidores.</figcaption></figure>
+  <figure class="fig"><img src="img/18-confirmar-senha.png" alt="Confirmação de senha ao aprovar"><figcaption>18. Ao aprovar ou desaprovar, a janela pede a senha de novo, e o servidor confere antes de gravar.</figcaption></figure>
+</div>
 
 <h2>6. Como foi testado e validado</h2>
 
-<h3>Resultado dos checks em 24/11/2026</h3>
-<pre class="cmd">python -m unittest discover -s tests          -> Ran 210 tests, OK (skipped=1)
+<h3>Resultado dos checks em 25/11/2026</h3>
+<pre class="cmd">python -m unittest discover -s tests          -> Ran 272 tests, OK (skipped=1)
 python -m compileall -q consulta scripts tests -> sem erros
-git check-ignore certs/servidor.key certs/ca.key -> ambos ignorados (chaves fora do Git)</pre>
+git check-ignore certs/servidor.key certs/ca.key -> ambos ignorados (chaves fora do Git)
+git check-ignore .env                          -> ignorado (conta fora do Git)</pre>
 <p>O teste pulado é o que só se aplica a sistemas POSIX. Nenhum warning novo.</p>
 
 <table>
   <tr><th style="width:30%">Arquivo de teste</th><th style="width:9%">Testes</th><th>O que prova</th></tr>
-  <tr><td>test_integracao_tls.py</td><td>49</td><td>Servidor e cliente reais com TLS: as sete operações, os códigos de erro, duas consultas simultâneas, certificado de outra CA recusado, servidor parado, busca abaixo de 1 s, decisão que sobrevive a reiniciar o servidor.</td></tr>
+  <tr><td>test_integracao_tls.py</td><td>63</td><td>Servidor e cliente reais com TLS: as nove operações, login certo e errado com a mesma mensagem, decidir sem a senha certa não grava, criar conta uma única vez, log sem usuário nem senha, os códigos de erro, duas consultas simultâneas, certificado de outra CA recusado, servidor parado, busca abaixo de 1 s, decisão que sobrevive a reiniciar o servidor.</td></tr>
   <tr><td>test_solicitacoes.py</td><td>27</td><td>Sorteio de 10 solicitações gravado e reutilizado, situação inicial Pendente, aprovar, desaprovar e trocar a decisão, duas decisões ao mesmo tempo, arquivo inválido recusado, falha ao gravar sem arquivo pela metade, arquivo fora do Git.</td></tr>
-  <tr><td>test_interface.py</td><td>60</td><td>Janela com cliente falso: lista, ficha, "nenhum resultado", erro de rede, faixa "dados fictícios", fonte de 12 pt ou mais, abas Solicitações e Regras, documento formal, botões Aprovar e Desaprovar e respostas atrasadas descartadas.</td></tr>
+  <tr><td>test_interface.py</td><td>84</td><td>Janela com cliente falso: login, criar conta (senhas diferentes, conta já existente, volta ao login), confirmação de senha ao decidir, lista, ficha, "nenhum resultado", erro de rede, faixa "dados fictícios", fonte de 12 pt ou mais, abas Solicitações e Regras, documento formal, botões Aprovar e Desaprovar e respostas atrasadas descartadas.</td></tr>
+  <tr><td>test_credenciais.py</td><td>24</td><td>Hash com sal diferente a cada vez e sem a senha, usuário errado também calcula o scrypt, <code>.env</code> ausente vale como sem conta e malformado é recusado, criar a conta grava o <code>.env</code> sem arquivo pela metade, uma única conta mesmo com criações simultâneas.</td></tr>
   <tr><td>test_regras.py</td><td>6</td><td>Os três blocos de regras com os valores pedidos, só título e linhas de texto, e cópia que não altera o original.</td></tr>
   <tr><td>test_protocolo.py</td><td>14</td><td>Linha válida, JSON inválido, mensagem grande demais.</td></tr>
   <tr><td>test_busca.py</td><td>12</td><td>Acentos, maiúsculas, trecho do nome, filtro por município.</td></tr>
@@ -205,22 +221,23 @@ git check-ignore certs/servidor.key certs/ca.key -> ambos ignorados (chaves fora
   <tr><td>RF-14 TLS e CA local</td><td>Handshake com a CA do projeto funciona; com outra CA o cliente recusa (captura 07).</td></tr>
   <tr><td>RF-15 a RF-18 solicitações</td><td>Testes de sorteio e persistência, de decisão (a última vale) e da aba; capturas 7 a 10 (seção 5).</td></tr>
   <tr><td>RF-19 regras</td><td>Texto entregue pelo servidor (integração por TLS), aba só de leitura, sem botão de cálculo, nova tentativa se a rede falhar; captura 11.</td></tr>
-  <tr><td>RNF-01 a RNF-07</td><td>Faixa fictícia, chaves ignoradas pelo Git, busca abaixo de 1 s, imports da biblioteca padrão, fonte de 12 pt, certificados regeneráveis por script, gravação das solicitações sem corromper o arquivo.</td></tr>
+  <tr><td>RF-20 a RF-22 login e conta</td><td>Integração por TLS do login, da decisão autenticada e da criação da conta; testes da janela; capturas 13 a 18.</td></tr>
+  <tr><td>RNF-01 a RNF-08</td><td>Faixa fictícia, chaves ignoradas pelo Git, busca abaixo de 1 s, imports da biblioteca padrão, fonte de 12 pt, certificados regeneráveis por script, gravação das solicitações sem corromper o arquivo, senha só como hash e <code>.env</code> fora do Git.</td></tr>
 </table>
 
 <div class="box warn">
   <strong>Limites conhecidos, sem esconder nada:</strong>
   <ul>
     <li>A demonstração à Juliana ainda não aconteceu. Os campos da ficha só estão confirmados pelo estudante.</li>
-    <li>Tudo foi testado em uma máquina (Windows 11, Python 3.15). A documentação consultada cobre o Python 3.13, e o comportamento na 3.15 foi confirmado pelos testes.</li>
+    <li>Tudo foi testado em Windows 11: até 24/11 em Python 3.15; os checks de 25/11 rodaram em Python 3.13.18 (ambiente isolado <code>.venv</code>). A documentação consultada cobre o Python 3.13.</li>
     <li>O cliente em outro computador está fora do escopo. A demonstração é local.</li>
-    <li>Não há login nem perfis. Qualquer cliente com a <code>ca.crt</code> consulta o servidor.</li>
+    <li>Há um único usuário e não há perfis. Só a janela exige o login para consultar: quem falar direto com o servidor, com a <code>ca.crt</code>, consegue consultar, mas não decidir. Quem alcançar o servidor antes do analista cria a conta (o servidor só escuta em <code>127.0.0.1</code>).</li>
   </ul>
 </div>
 
 <h2 class="esp">7. Passo a passo para testar como usuário</h2>
 
-<p><strong>Antes de começar:</strong> abra a pasta do projeto no terminal (PowerShell ou Git Bash) e use dois terminais, um para o servidor e outro para o cliente. Se <code>python</code> não funcionar, use <code>python3</code> ou <code>py</code>.</p>
+<p><strong>Antes de começar:</strong> abra a pasta do projeto no terminal (PowerShell ou Git Bash) e use dois terminais, um para o servidor e outro para o cliente. Se <code>python</code> não funcionar, use <code>python3</code>, <code>py</code> ou o Python do ambiente isolado (<code>.venv\Scripts\python.exe</code>). Para ver a criação de conta, comece sem conta: com o servidor parado, apague o <code>.env</code> (ou deixe-o vazio).</p>
 
 <ol class="passos">
   <li><strong>Gerar os certificados</strong> (só se a pasta <code>certs/</code> não existir)
@@ -229,11 +246,20 @@ git check-ignore certs/servidor.key certs/ca.key -> ambos ignorados (chaves fora
 
   <li><strong>Terminal 1: subir o servidor</strong> e deixar aberto
     <pre class="cmd">python -m consulta.servidor</pre>
-    <span class="esperado">Esperado: "Servidor no ar em 127.0.0.1:8443 (Ctrl+C para encerrar)". Se a porta estiver ocupada, use <code>--porta 9443</code> aqui e no cliente.</span></li>
+    <span class="esperado">Esperado: "Servidor no ar em 127.0.0.1:8443 (Ctrl+C para encerrar)". Sem conta, antes dessa linha: "Ainda não há conta: crie uma pela janela (botão 'Criar conta' no login)." Se a porta estiver ocupada, use <code>--porta 9443</code> aqui e no cliente.</span></li>
 
   <li><strong>Terminal 2: abrir o cliente</strong>
     <pre class="cmd">python -m consulta.interface</pre>
-    <span class="esperado">Esperado: janela "Consulta de servidores municipais" com a faixa amarela "Dados fictícios, para demonstração" e as abas "Consulta" e "Solicitações". A lista já abre com os 50 servidores ("50 servidor(es) encontrado(s)"), e os municípios carregam sozinhos no filtro.</span></li>
+    <span class="esperado">Esperado: só a tela "Entrar", com Usuário, Senha (mascarada) e os botões Criar conta, Entrar e Cancelar. A janela principal ainda não aparece.</span></li>
+
+  <li><strong>Tentar entrar sem conta.</strong> Digite um usuário e uma senha quaisquer e clique em Entrar.
+    <span class="esperado">Esperado: "Usuário ou senha inválidos.", depois de cerca de 1 s. A senha é limpa e nada mais aparece (captura 13).</span></li>
+
+  <li><strong>Criar a conta.</strong> Clique em Criar conta, informe o usuário e a senha (4 a 100 caracteres) e repita a senha. Teste antes uma repetição diferente.
+    <span class="esperado">Esperado: com senhas diferentes, "As senhas não conferem.", sem ir ao servidor (captura 14). Com as duas iguais, a janela volta ao login com "Conta criada. Entre com ela." e o usuário preenchido (captura 16). O <code>.env</code> passa a ter <code>USUARIO</code> e <code>SENHA_HASH=scrypt$...</code>, sem a senha. Cancelar volta ao login.</span></li>
+
+  <li><strong>Senha errada, depois a certa.</strong> Digite uma senha errada e clique em Entrar; depois a senha criada.
+    <span class="esperado">Esperado: a senha errada recebe "Usuário ou senha inválidos." (captura 17). Com a certa, abre a janela "Consulta de servidores municipais" com a faixa amarela "Dados fictícios, para demonstração" e as abas "Consulta", "Solicitações" e "Regras". A lista já abre com os 50 servidores ("50 servidor(es) encontrado(s)"), e os municípios carregam sozinhos no filtro.</span></li>
 
   <li><strong>Busca simples.</strong> Digite <code>marc</code> e clique em Buscar.
     <span class="esperado">Esperado: 2 resultados: Márcia Rodrigues Araújo (Aparecida de Goiânia) e Marcos Santos Gonçalves (Itumbiara). Rodapé: "2 servidor(es) encontrado(s)".</span></li>
@@ -254,13 +280,13 @@ git check-ignore certs/servidor.key certs/ca.key -> ambos ignorados (chaves fora
     <span class="esperado">Esperado: 10 requerimentos (REQ-2026-0001 a REQ-2026-0010), todos "Pendente" na primeira execução, de servidores e municípios diferentes. Abaixo aparece o requerimento formal: número, "Situação: Pendente", o pedido ao Setor de Pessoal do município e a assinatura. O texto concorda com o sexo do servidor (a servidora, lotada, ingressada). Não aparecem idade, tempo de contribuição, PCD, doença nem remuneração. O rodapé avisa que o documento é fictício. Rodapé da janela: "10 solicitação(ões)".</span></li>
 
   <li><strong>Aprovar e desaprovar.</strong> Com uma solicitação selecionada, clique em Aprovar. Selecione outra e clique em Desaprovar. Depois volte à primeira e clique em Desaprovar.
-    <span class="esperado">Esperado: a coluna Situação e o documento mudam na hora, com "Aprovada em" ou "Desaprovada em", a data e a hora da decisão. A segunda decisão sobre a mesma solicitação substitui a primeira (a última vale). Os botões ficam desabilitados enquanto nada está selecionado.</span></li>
+    <span class="esperado">Esperado: cada clique pede a senha de novo (captura 18); senha errada mantém a confirmação aberta e não grava nada. Com a senha certa, a coluna Situação e o documento mudam na hora, com "Aprovada em" ou "Desaprovada em", a data e a hora da decisão. A segunda decisão sobre a mesma solicitação substitui a primeira (a última vale). Os botões ficam desabilitados enquanto nada está selecionado.</span></li>
 
   <li><strong>Situação na ficha.</strong> Anote o nome de um servidor com solicitação decidida, vá à aba "Consulta", busque pelo nome e abra a ficha.
     <span class="esperado">Esperado: o último campo, "Situação da solicitação", mostra Aprovada ou Desaprovada. Um servidor sem requerimento mostra "Nenhuma solicitação".</span></li>
 
   <li><strong>A decisão sobrevive a reiniciar.</strong> No Terminal 1, aperte Ctrl+C e suba o servidor de novo (<code>python -m consulta.servidor</code>). Na janela, volte à aba Solicitações (ela recarrega a lista ao ser aberta).
-    <span class="esperado">Esperado: as situações decididas continuam iguais. Para voltar tudo a Pendente e sortear outros 10 servidores, pare o servidor, apague <code>data/solicitacoes.json</code> e suba o servidor de novo.</span></li>
+    <span class="esperado">Esperado: as situações decididas continuam iguais, e a conta também (o login funciona com a mesma senha). Para voltar tudo a Pendente e sortear outros 10 servidores, pare o servidor, apague <code>data/solicitacoes.json</code> e suba o servidor de novo.</span></li>
 
   <li><strong>Aba Regras.</strong> Clique na aba "Regras".
     <span class="esperado">Esperado: três blocos: "Regra geral" (62 anos mulher e 65 homem; 25 anos de contribuição), "Pessoa com deficiência (PCD)" (por tempo: 25 anos homem e 20 mulher; por idade: 60 homem e 55 mulher, com 15 anos de contribuição) e "Doença profissional ou acidente de trabalho" (aprovação direta). O texto não pode ser editado, e o rodapé diz que é simplificado. Não há botão que calcule nada.</span></li>
@@ -269,7 +295,7 @@ git check-ignore certs/servidor.key certs/ca.key -> ambos ignorados (chaves fora
     <span class="esperado">Esperado: as duas janelas respondem, sem uma esperar a outra.</span></li>
 
   <li><strong>Olhar o log do servidor</strong> (Terminal 1).
-    <span class="esperado">Esperado: uma linha por consulta, com hora, endereço do cliente, <code>TLSv1.3</code>, a cifra, a operação e <code>resultado=ok</code>. O conteúdo das fichas não aparece.</span></li>
+    <span class="esperado">Esperado: uma linha por consulta, com hora, endereço do cliente, <code>TLSv1.3</code>, a cifra, a operação e <code>resultado=ok</code> (ou o código do erro, como <code>erro:CREDENCIAIS_INVALIDAS</code>). O conteúdo das fichas, o usuário e a senha não aparecem.</span></li>
 
   <li><strong>Servidor fora do ar.</strong> No Terminal 1, aperte Ctrl+C e, na janela, busque qualquer nome.
     <span class="esperado">Esperado: "Não foi possível conectar ao servidor. Verifique se ele está em execução." A janela continua aberta. Suba o servidor de novo (passo 2) e busque: volta a funcionar sem reabrir a janela.</span></li>
@@ -282,18 +308,18 @@ python -m consulta.servidor --certs certs/falso</pre>
 
   <li><strong>Conferir os testes e os segredos</strong> (qualquer terminal)
     <pre class="cmd">python -m unittest discover -s tests
-git check-ignore certs/servidor.key certs/ca.key</pre>
-    <span class="esperado">Esperado: "OK" com 210 testes (1 pulado) e as duas chaves listadas como ignoradas.</span></li>
+git check-ignore certs/servidor.key certs/ca.key .env</pre>
+    <span class="esperado">Esperado: "OK" com 272 testes (1 pulado) e os três arquivos listados como ignorados.</span></li>
 </ol>
 
 <h2>8. O que falta e próximos passos</h2>
 <table>
   <tr><th style="width:18%">Prazo</th><th>O que fazer</th></tr>
-  <tr><td>Antes de 26/11</td><td>Demonstrar à Juliana usando o passo a passo acima (passos 2 a 13 e 17). Conferir os campos da ficha com ela e registrar por escrito as considerações.</td></tr>
+  <tr><td>Antes de 26/11</td><td>Demonstrar à Juliana usando o passo a passo acima (passos 2 a 16 e 20). Conferir os campos da ficha com ela e registrar por escrito as considerações.</td></tr>
   <tr><td>07/12, 23h59</td><td>Relatório PDF (até 5 páginas, Arial 12, margens 2,5 e 3 cm, com as capturas da seção 5); vídeo de até 10 minutos; envio nos dois campos da Plataforma A.</td></tr>
 </table>
 
-<p class="meta">Repositório: github.com/FhilipeRodrigues/projeto-integrador-iii-a. Especificação completa em <code>docs/specs/2026-11-16-consulta-servidores-tcmgo/</code> (PRD, TechSpec, 17 tasks e check-spec).</p>
+<p class="meta">Repositório: github.com/FhilipeRodrigues/projeto-integrador-iii-a. Especificação completa em <code>docs/specs/2026-11-16-consulta-servidores-tcmgo/</code> (PRD, TechSpec, 19 tasks e check-spec).</p>
 
 </body>
 </html>
